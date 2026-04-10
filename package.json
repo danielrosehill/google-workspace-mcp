@@ -1,7 +1,7 @@
 {
-  "name": "@dguido/google-workspace-mcp",
-  "version": "3.4.4",
-  "description": "Google Workspace MCP Server - Model Context Protocol server providing secure access to Google Drive, Docs, Sheets, Slides, Calendar, and Gmail through MCP clients e.g. Claude Desktop",
+  "name": "@danielrosehill/google-workspace-mcp",
+  "version": "4.0.0",
+  "description": "Multi-workspace Google Workspace MCP Server — secure access to Gmail, Drive, Docs, Sheets, Calendar via MCP with per-workspace OAuth and streamable HTTP transport",
   "keywords": [
     "ai",
     "claude",
@@ -20,13 +20,13 @@
     "model-context-protocol",
     "oauth2"
   ],
-  "homepage": "https://github.com/dguido/google-workspace-mcp",
-  "bugs": "https://github.com/dguido/google-workspace-mcp/issues",
+  "homepage": "https://github.com/danielrosehill/google-workspace-mcp",
+  "bugs": "https://github.com/danielrosehill/google-workspace-mcp/issues",
   "license": "MIT",
-  "author": "Dan Guido <dan@trailofbits.com>",
+  "author": "Daniel Rosehill <public@danielrosehill.com>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/dguido/google-workspace-mcp.git"
+    "url": "git+https://github.com/danielrosehill/google-workspace-mcp.git"
   },
   "bin": {
     "google-workspace-mcp": "dist/index.js"
