@@ -2,6 +2,7 @@
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
   CallToolRequestSchema,
   ListResourcesRequestSchema,
@@ -12,11 +13,17 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { google } from "googleapis";
 import type { drive_v3 } from "googleapis";
-import { authenticate, AuthServer, initializeOAuth2Client } from "./auth.js";
+import {
+  authenticate,
+  AuthServer,
+  initializeOAuth2Client,
+  getWorkspaceServices,
+} from "./auth.js";
 import type { OAuth2Client } from "google-auth-library";
 import { fileURLToPath } from "url";
 import { readFileSync } from "fs";
 import { join, dirname } from "path";
+import { createServer as createHttpServer } from "http";
 
 // Import utilities
 import {
@@ -39,6 +46,8 @@ import {
   areUnifiedToolsEnabled,
   getEnabledServices,
   isReadOnlyMode,
+  getWorkspace,
+  loadWorkspacesConfig,
 } from "./config/index.js";
 
 // Import auth utilities for startup logging
@@ -51,7 +60,7 @@ import {
 } from "./auth/utils.js";
 
 // Import all tool definitions
-import { getAllTools } from "./tools/index.js";
+import { getAllTools, gmailTools } from "./tools/index.js";
 
 // Import error utilities
 import { mapGoogleError, isGoogleApiError, GoogleAuthError } from "./errors/index.js";
@@ -672,6 +681,7 @@ function createToolRegistry(): Record<string, ToolHandler> {
 }
 
 const toolRegistry = createToolRegistry();
+const GMAIL_TOOL_NAMES = new Set(gmailTools.map((t) => t.name));
 
 // -----------------------------------------------------------------------------
 // TOOL CALL REQUEST HANDLER
@@ -689,11 +699,41 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     return handleListTools(args);
   }
 
-  await ensureAuthenticated();
   log("Handling tool request", { tool: toolName });
 
   try {
     const meta = (request.params as { _meta?: { progressToken?: string | number } })._meta;
+    const context: HandlerContext = { server, progressToken: meta?.progressToken };
+
+    // Gmail tools use per-workspace auth
+    if (GMAIL_TOOL_NAMES.has(toolName)) {
+      const typedArgs = args as { workspace?: string } | undefined;
+      const workspace = typedArgs?.workspace;
+      if (!workspace) {
+        return errorResponse("workspace parameter is required for Gmail tools");
+      }
+
+      const ws = await getWorkspaceServices(workspace);
+      const services: ToolServices = {
+        drive: ws.drive,
+        docs: ws.docs,
+        sheets: ws.sheets,
+        slides: ws.slides,
+        calendar: ws.calendar,
+        gmail: ws.gmail,
+        people: ws.people,
+        context,
+      };
+
+      const handler = toolRegistry[toolName];
+      if (!handler) {
+        return errorResponse(`Unknown tool: ${toolName}`);
+      }
+      return handler(services, args);
+    }
+
+    // Non-Gmail tools use legacy singleton auth
+    await ensureAuthenticated();
 
     const services: ToolServices = {
       drive: drive!,
@@ -703,7 +743,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       calendar: getCalendarService(authClient!),
       gmail: getGmailService(authClient!),
       people: getPeopleService(authClient!),
-      context: { server, progressToken: meta?.progressToken },
+      context,
     };
 
     const handler = toolRegistry[toolName];
@@ -743,45 +783,47 @@ function showHelp(): void {
 Google Workspace MCP Server v${VERSION}
 
 Usage:
-  npx @dguido/google-workspace-mcp [command] [options]
+  npx google-workspace-mcp [command] [options]
 
 Commands:
-  auth     Run the authentication flow
-  start    Start the MCP server (default)
-  version  Show version information
-  help     Show this help message
+  auth            Run the authentication flow (legacy single-account)
+  auth --workspace <name>  Authenticate a workspace from workspaces.json
+  workspaces      List configured workspaces
+  start           Start the MCP server (default)
+  version         Show version information
+  help            Show this help message
 
 Options:
-  --profile <name>           Use a named profile for credentials and tokens
+  --workspace <name>         Target workspace for auth
+  --profile <name>           Use a named profile (legacy single-account mode)
   --token-path <path>        Save tokens to custom path (overrides profile)
 
-Default Paths:
+Multi-Workspace Setup (recommended):
+  1. Create workspaces.json (up to 5 workspaces):
+     ${process.env.GWS_WORKSPACES_CONFIG || "/opt/mcp/gws/credentials/workspaces.json"}
+  2. Auth each workspace:
+     npx google-workspace-mcp auth --workspace personal
+     npx google-workspace-mcp auth --workspace business
+  3. Gmail tools require a "workspace" parameter in every call
+
+Legacy Single-Account Setup:
   Credentials: ${configDir}/credentials.json
   Tokens:      ${configDir}/tokens.json
 
-Profile Paths (when --profile or GOOGLE_WORKSPACE_MCP_PROFILE is set):
-  Credentials: ${configDir}/profiles/<name>/credentials.json
-  Tokens:      ${configDir}/profiles/<name>/tokens.json
+Environment Variables:
+  GWS_WORKSPACES_CONFIG          Path to workspaces.json (multi-workspace mode)
+  GWS_MCP_PORT                   HTTP transport port (default: stdio only)
+  GWS_MCP_HOST                   HTTP transport bind address (default: 127.0.0.1)
+  GOOGLE_CLIENT_ID               OAuth Client ID (legacy single-account)
+  GOOGLE_CLIENT_SECRET           OAuth Client Secret (legacy single-account)
+  GOOGLE_WORKSPACE_MCP_PROFILE   Named profile (legacy single-account)
+  GOOGLE_WORKSPACE_READ_ONLY     Restrict to read-only operations (true/false)
 
 Examples:
-  npx @dguido/google-workspace-mcp auth
-  npx @dguido/google-workspace-mcp auth --profile personal
-  npx @dguido/google-workspace-mcp auth --profile work
-  npx @dguido/google-workspace-mcp start
-  npx @dguido/google-workspace-mcp
-
-Environment Variables:
-  GOOGLE_CLIENT_ID                 OAuth Client ID (simplest setup)
-  GOOGLE_CLIENT_SECRET             OAuth Client Secret (used with GOOGLE_CLIENT_ID)
-  GOOGLE_WORKSPACE_MCP_PROFILE     Named profile for credential isolation
-  GOOGLE_WORKSPACE_MCP_TOKEN_PATH  Path to store authentication tokens (overrides profile)
-  GOOGLE_WORKSPACE_READ_ONLY       Restrict to read-only operations (true/false)
-
-Multi-Account Setup:
-  Use named profiles to isolate credentials per project:
-  1. Auth each profile: npx @dguido/google-workspace-mcp auth --profile personal
-  2. Set profile in your project's MCP config:
-     { "env": { "GOOGLE_WORKSPACE_MCP_PROFILE": "personal" } }
+  npx google-workspace-mcp auth --workspace personal
+  npx google-workspace-mcp workspaces
+  npx google-workspace-mcp start
+  npx google-workspace-mcp
 `);
 }
 
@@ -816,6 +858,74 @@ async function runAuthServer(tokenPath?: string): Promise<void> {
   }
 }
 
+async function runWorkspaceAuth(workspaceName: string): Promise<void> {
+  try {
+    const entry = await getWorkspace(workspaceName);
+    console.log(`Authenticating workspace "${workspaceName}" (${entry.email})...`);
+    console.log(`  Credentials: ${entry.clientCredentials}`);
+    console.log(`  Token path:  ${entry.tokenPath}`);
+
+    // Read credentials from workspace config
+    const credContent = await import("fs").then((m) =>
+      m.promises.readFile(entry.clientCredentials, "utf-8"),
+    );
+    const { parseCredentialsFile } = await import("./types/credentials.js");
+    const keys = parseCredentialsFile(credContent);
+
+    const source = keys.installed || keys.web;
+    const clientId = source?.client_id || keys.client_id;
+    const clientSecret = source?.client_secret || keys.client_secret;
+    const redirectUris = source?.redirect_uris || keys.redirect_uris;
+
+    if (!clientId) {
+      throw new Error(`No client_id found in ${entry.clientCredentials}`);
+    }
+
+    const { OAuth2Client } = await import("google-auth-library");
+    const oauth2Client = new OAuth2Client({
+      clientId,
+      clientSecret: clientSecret || undefined,
+      redirectUri: redirectUris?.[0] || "http://127.0.0.1/oauth2callback",
+    });
+
+    // Point token storage at workspace token path
+    process.env.GOOGLE_WORKSPACE_MCP_TOKEN_PATH = entry.tokenPath;
+
+    const authServer = new AuthServer(oauth2Client);
+    await authServer.start();
+
+    const checkInterval = setInterval(() => {
+      if (authServer.authCompletedSuccessfully) {
+        clearInterval(checkInterval);
+        console.log(`\nWorkspace "${workspaceName}" authenticated successfully.`);
+        process.exit(0);
+      }
+    }, 1000);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error(`Authentication failed for workspace "${workspaceName}": ${msg}`);
+    process.exit(1);
+  }
+}
+
+async function listWorkspaces(): Promise<void> {
+  try {
+    const config = await loadWorkspacesConfig();
+    console.log(`\nConfigured workspaces (${config.size}):\n`);
+    for (const [name, entry] of config) {
+      console.log(`  ${name}`);
+      console.log(`    Email:       ${entry.email}`);
+      console.log(`    Credentials: ${entry.clientCredentials}`);
+      console.log(`    Tokens:      ${entry.tokenPath}`);
+      console.log();
+    }
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error(`Failed to load workspaces: ${msg}`);
+    process.exit(1);
+  }
+}
+
 // -----------------------------------------------------------------------------
 // MAIN EXECUTION
 // -----------------------------------------------------------------------------
@@ -824,6 +934,7 @@ interface CliArgs {
   command: string | undefined;
   tokenPath?: string;
   profile?: string;
+  workspace?: string;
 }
 
 function parseCliArgs(): CliArgs {
@@ -831,6 +942,7 @@ function parseCliArgs(): CliArgs {
   let command: string | undefined;
   let tokenPath: string | undefined;
   let profile: string | undefined;
+  let workspace: string | undefined;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -847,6 +959,12 @@ function parseCliArgs(): CliArgs {
       continue;
     }
 
+    // Handle --workspace flag
+    if (arg === "--workspace" && i + 1 < args.length) {
+      workspace = args[++i];
+      continue;
+    }
+
     // Handle special version/help flags as commands
     if (arg === "--version" || arg === "-v" || arg === "--help" || arg === "-h") {
       command = arg;
@@ -860,11 +978,11 @@ function parseCliArgs(): CliArgs {
     }
   }
 
-  return { command, tokenPath, profile };
+  return { command, tokenPath, profile, workspace };
 }
 
 async function main() {
-  const { command, tokenPath, profile } = parseCliArgs();
+  const { command, tokenPath, profile, workspace } = parseCliArgs();
 
   // Set profile env var early so all path resolution sees it
   if (profile) {
@@ -873,15 +991,62 @@ async function main() {
 
   switch (command) {
     case "auth":
-      await runAuthServer(tokenPath);
+      if (workspace) {
+        await runWorkspaceAuth(workspace);
+      } else {
+        await runAuthServer(tokenPath);
+      }
+      break;
+    case "workspaces":
+      await listWorkspaces();
       break;
     case "start":
     case undefined:
       try {
-        // Start the MCP server
         log("Starting Google Workspace MCP server...");
-        const transport = new StdioServerTransport();
-        await server.connect(transport);
+
+        const httpPort = process.env.GWS_MCP_PORT
+          ? parseInt(process.env.GWS_MCP_PORT, 10)
+          : undefined;
+        const httpHost = process.env.GWS_MCP_HOST || "127.0.0.1";
+
+        if (httpPort) {
+          // Streamable HTTP transport for aggregator connectivity
+          const httpTransport = new StreamableHTTPServerTransport({
+            sessionIdGenerator: () => crypto.randomUUID(),
+          });
+          await server.connect(httpTransport);
+
+          const httpServer = createHttpServer((req, res) => {
+            httpTransport.handleRequest(req, res);
+          });
+
+          httpServer.listen(httpPort, httpHost, () => {
+            log(`HTTP transport listening on ${httpHost}:${httpPort}`);
+          });
+
+          // Graceful shutdown closes both
+          const shutdown = async () => {
+            httpServer.close();
+            await server.close();
+            process.exit(0);
+          };
+          process.on("SIGINT", shutdown);
+          process.on("SIGTERM", shutdown);
+        } else {
+          // Stdio transport for local development
+          const transport = new StdioServerTransport();
+          await server.connect(transport);
+
+          process.on("SIGINT", async () => {
+            await server.close();
+            process.exit(0);
+          });
+          process.on("SIGTERM", async () => {
+            await server.close();
+            process.exit(0);
+          });
+        }
 
         // Enhanced startup logging
         const enabledServices = Array.from(getEnabledServices());
@@ -889,6 +1054,7 @@ async function main() {
         log("Server started", {
           version: VERSION,
           node: process.version,
+          transport: httpPort ? `http://${httpHost}:${httpPort}` : "stdio",
           profile: getActiveProfile(),
           services: enabledServices,
           read_only: isReadOnlyMode(),
@@ -912,16 +1078,6 @@ async function main() {
             });
           }
         }
-
-        // Set up graceful shutdown
-        process.on("SIGINT", async () => {
-          await server.close();
-          process.exit(0);
-        });
-        process.on("SIGTERM", async () => {
-          await server.close();
-          process.exit(0);
-        });
       } catch (error) {
         log("Failed to start server", error);
         process.exit(1);

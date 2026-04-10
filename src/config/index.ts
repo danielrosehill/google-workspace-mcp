@@ -9,3 +9,12 @@ export {
 } from "./services.js";
 
 export { getScopesForEnabledServices } from "./scopes.js";
+
+export {
+  type WorkspaceEntry,
+  loadWorkspacesConfig,
+  getWorkspace,
+  getWorkspaceNames,
+  resetWorkspacesCache,
+  saveWorkspacesConfig,
+} from "./workspaces.js";

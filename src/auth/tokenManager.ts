@@ -30,9 +30,9 @@ export class TokenManager {
   private lastAuthError: GoogleAuthError | null = null;
   private tokenFileMutex = new Mutex();
 
-  constructor(oauth2Client: OAuth2Client, accountEmail?: string) {
+  constructor(oauth2Client: OAuth2Client, accountEmail?: string, tokenPath?: string) {
     this.oauth2Client = oauth2Client;
-    this.tokenPath = getSecureTokenPath();
+    this.tokenPath = tokenPath || getSecureTokenPath();
     this.accountEmail = accountEmail;
     this.setupTokenRefresh();
     // Register as active manager for module-level error access

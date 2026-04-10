@@ -3861,6 +3861,27 @@ import {
   type ServiceName,
 } from "../config/index.js";
 
+const WORKSPACE_PROPERTY = {
+  type: "string",
+  description:
+    "Workspace name (e.g. 'personal', 'business'). " +
+    "Must match an entry in workspaces.json.",
+};
+
+function withWorkspace(tools: ToolDefinition[]): ToolDefinition[] {
+  return tools.map((tool) => ({
+    ...tool,
+    inputSchema: {
+      ...tool.inputSchema,
+      properties: {
+        workspace: WORKSPACE_PROPERTY,
+        ...tool.inputSchema.properties,
+      },
+      required: ["workspace", ...(tool.inputSchema.required || [])],
+    },
+  }));
+}
+
 /** Map of service names to their tool definitions */
 export const SERVICE_TOOL_MAP: Record<ServiceName, ToolDefinition[]> = {
   drive: driveTools,
@@ -3868,7 +3889,7 @@ export const SERVICE_TOOL_MAP: Record<ServiceName, ToolDefinition[]> = {
   sheets: sheetsTools,
   slides: slidesTools,
   calendar: calendarTools,
-  gmail: gmailTools,
+  gmail: withWorkspace(gmailTools),
   contacts: contactsTools,
 };
 

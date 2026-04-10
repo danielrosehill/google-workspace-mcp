@@ -244,6 +244,9 @@ export type {
   DeleteContactInput,
 } from "./contacts.js";
 
+// Workspace schema
+export { WorkspaceField } from "./workspace.js";
+
 // Status schema
 export { GetStatusSchema } from "./status.js";
 

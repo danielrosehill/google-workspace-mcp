@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { WorkspaceField } from "./workspace.js";
 
 /**
  * Gmail's allowed label colors (restricted palette)
@@ -109,6 +110,7 @@ export type AttachmentInput = z.infer<typeof AttachmentSchema>;
 // Core Email Operations
 
 export const SendEmailSchema = z.object({
+  workspace: WorkspaceField,
   to: z.array(z.string().email()).min(1, "At least one recipient required"),
   subject: z.string().min(1, "Subject required"),
   body: z.string().describe("Plain text email body"),
@@ -124,6 +126,7 @@ export const SendEmailSchema = z.object({
 export type SendEmailInput = z.infer<typeof SendEmailSchema>;
 
 export const DraftEmailSchema = z.object({
+  workspace: WorkspaceField,
   draftId: z.string().min(1).optional().describe("Draft ID to update (omit to create new)"),
   to: z.array(z.string().email()).optional().describe("Recipients (can be empty for drafts)"),
   subject: z.string().optional().describe("Subject (can be empty for drafts)"),
@@ -139,6 +142,7 @@ export const DraftEmailSchema = z.object({
 export type DraftEmailInput = z.infer<typeof DraftEmailSchema>;
 
 export const DeleteDraftSchema = z.object({
+  workspace: WorkspaceField,
   id: z
     .union([z.string().min(1), z.array(z.string().min(1)).min(1).max(100)])
     .describe("Draft ID or array of IDs (max 100)"),
@@ -147,6 +151,7 @@ export const DeleteDraftSchema = z.object({
 export type DeleteDraftInput = z.infer<typeof DeleteDraftSchema>;
 
 export const ListDraftsSchema = z.object({
+  workspace: WorkspaceField,
   query: z.string().max(500).optional().describe("Gmail search query"),
   maxResults: z.number().int().min(1).max(500).optional().default(50).describe("Maximum results"),
   pageToken: z.string().optional().describe("Token for pagination"),
@@ -155,6 +160,7 @@ export const ListDraftsSchema = z.object({
 export type ListDraftsInput = z.infer<typeof ListDraftsSchema>;
 
 export const ReadEmailSchema = z.object({
+  workspace: WorkspaceField,
   id: z.string().min(1, "Message ID required"),
   format: z
     .enum(["full", "metadata", "minimal", "raw"])
@@ -172,6 +178,7 @@ export type ReadEmailInput = z.infer<typeof ReadEmailSchema>;
 
 export const SearchEmailsSchema = z
   .object({
+    workspace: WorkspaceField,
     query: z
       .string()
       .max(500)
@@ -207,6 +214,7 @@ export type SearchEmailsInput = z.infer<typeof SearchEmailsSchema>;
  * Schema for deleting emails - supports single ID or array for batch operations
  */
 export const DeleteEmailSchema = z.object({
+  workspace: WorkspaceField,
   id: z
     .union([z.string().min(1), z.array(z.string().min(1)).min(1).max(1000)])
     .describe("Message ID or array of IDs (max 1000 for batch)"),
@@ -218,6 +226,7 @@ export type DeleteEmailInput = z.infer<typeof DeleteEmailSchema>;
  * Schema for modifying email labels - supports single ID or array for batch operations
  */
 export const ModifyEmailSchema = z.object({
+  workspace: WorkspaceField,
   threadId: z
     .union([z.string().min(1), z.array(z.string().min(1)).min(1).max(1000)])
     .describe("Thread ID or array of IDs (max 1000 for batch)"),
@@ -228,6 +237,7 @@ export const ModifyEmailSchema = z.object({
 export type ModifyEmailInput = z.infer<typeof ModifyEmailSchema>;
 
 export const DownloadAttachmentSchema = z.object({
+  workspace: WorkspaceField,
   id: z.string().min(1, "Message ID required"),
   attachmentId: z.string().min(1, "Attachment ID required"),
   filename: z.string().optional().describe("Save filename (uses original if not specified)"),
@@ -239,6 +249,7 @@ export type DownloadAttachmentInput = z.infer<typeof DownloadAttachmentSchema>;
 // Label Management
 
 export const CreateLabelSchema = z.object({
+  workspace: WorkspaceField,
   name: z.string().min(1, "Label name required"),
   messageListVisibility: z
     .enum(["show", "hide"])
@@ -261,6 +272,7 @@ export const CreateLabelSchema = z.object({
 export type CreateLabelInput = z.infer<typeof CreateLabelSchema>;
 
 export const UpdateLabelSchema = z.object({
+  workspace: WorkspaceField,
   labelId: z.string().min(1, "Label ID required"),
   name: z.string().optional().describe("New label name"),
   messageListVisibility: z.enum(["show", "hide"]).optional(),
@@ -272,12 +284,14 @@ export const UpdateLabelSchema = z.object({
 export type UpdateLabelInput = z.infer<typeof UpdateLabelSchema>;
 
 export const DeleteLabelSchema = z.object({
+  workspace: WorkspaceField,
   labelId: z.string().min(1, "Label ID required"),
 });
 
 export type DeleteLabelInput = z.infer<typeof DeleteLabelSchema>;
 
 export const ListLabelsSchema = z.object({
+  workspace: WorkspaceField,
   includeSystemLabels: z
     .boolean()
     .optional()
@@ -288,6 +302,7 @@ export const ListLabelsSchema = z.object({
 export type ListLabelsInput = z.infer<typeof ListLabelsSchema>;
 
 export const GetOrCreateLabelSchema = z.object({
+  workspace: WorkspaceField,
   name: z.string().min(1, "Label name required"),
   messageListVisibility: z.enum(["show", "hide"]).optional().default("show"),
   labelListVisibility: z.enum(["labelShow", "labelShowIfUnread", "labelHide"]).optional(),
@@ -344,6 +359,7 @@ export type FilterTemplateTypeValue = z.infer<typeof FilterTemplateType>;
  */
 export const CreateFilterSchema = z
   .object({
+    workspace: WorkspaceField,
     // Direct mode
     criteria: FilterCriteriaSchema.optional(),
     action: FilterActionSchema.optional(),
@@ -389,6 +405,7 @@ export const CreateFilterSchema = z
 export type CreateFilterInput = z.infer<typeof CreateFilterSchema>;
 
 export const ListFiltersSchema = z.object({
+  workspace: WorkspaceField,
   filterId: z
     .string()
     .optional()
@@ -398,6 +415,7 @@ export const ListFiltersSchema = z.object({
 export type ListFiltersInput = z.infer<typeof ListFiltersSchema>;
 
 export const DeleteFilterSchema = z.object({
+  workspace: WorkspaceField,
   filterId: z.string().min(1, "Filter ID required"),
 });
 

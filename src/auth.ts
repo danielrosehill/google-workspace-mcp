@@ -10,6 +10,11 @@ const AUTH_FLOW_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 export { TokenManager } from "./auth/tokenManager.js";
 export { initializeOAuth2Client } from "./auth/client.js";
 export { AuthServer } from "./auth/server.js";
+export {
+  getWorkspaceServices,
+  clearWorkspaceCache,
+  type WorkspaceServices,
+} from "./auth/workspaceAuth.js";
 
 /**
  * Authenticate and return OAuth2 client

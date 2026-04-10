@@ -58,7 +58,7 @@ describe("handleDraftEmail", () => {
       },
     } as never);
 
-    const result = await handleDraftEmail(mockGmail, {
+    const result = await handleDraftEmail(mockGmail, { workspace: "test",
       to: ["alice@example.com"],
       subject: "Hello",
       body: "World",
@@ -88,7 +88,7 @@ describe("handleDraftEmail", () => {
       },
     } as never);
 
-    const result = await handleDraftEmail(mockGmail, {
+    const result = await handleDraftEmail(mockGmail, { workspace: "test",
       draftId: "draft123",
       to: ["bob@example.com"],
       subject: "Updated",
@@ -128,7 +128,7 @@ describe("handleDeleteDraft", () => {
   it("deletes a single draft", async () => {
     vi.mocked(mockGmail.users.drafts.delete).mockResolvedValue({} as never);
 
-    const result = await handleDeleteDraft(mockGmail, { id: "draft1" });
+    const result = await handleDeleteDraft(mockGmail, { workspace: "test", id: "draft1" });
 
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain("draft1");
@@ -148,7 +148,7 @@ describe("handleDeleteDraft", () => {
   it("batch deletes multiple drafts", async () => {
     vi.mocked(mockGmail.users.drafts.delete).mockResolvedValue({} as never);
 
-    const result = await handleDeleteDraft(mockGmail, {
+    const result = await handleDeleteDraft(mockGmail, { workspace: "test",
       id: ["d1", "d2", "d3"],
     });
 
@@ -170,7 +170,7 @@ describe("handleDeleteDraft", () => {
       .mockRejectedValueOnce(new Error("Not found"))
       .mockResolvedValueOnce({} as never);
 
-    const result = await handleDeleteDraft(mockGmail, {
+    const result = await handleDeleteDraft(mockGmail, { workspace: "test",
       id: ["d1", "d2", "d3"],
     });
 
@@ -191,7 +191,7 @@ describe("handleDeleteDraft", () => {
       .mockRejectedValueOnce(new Error("Not found"))
       .mockRejectedValueOnce(new Error("Permission denied"));
 
-    const result = await handleDeleteDraft(mockGmail, {
+    const result = await handleDeleteDraft(mockGmail, { workspace: "test",
       id: ["d1", "d2"],
     });
 
@@ -200,12 +200,12 @@ describe("handleDeleteDraft", () => {
   });
 
   it("returns validation error for empty id", async () => {
-    const result = await handleDeleteDraft(mockGmail, { id: "" });
+    const result = await handleDeleteDraft(mockGmail, { workspace: "test", id: "" });
     expect(result.isError).toBe(true);
   });
 
   it("returns validation error for empty array", async () => {
-    const result = await handleDeleteDraft(mockGmail, { id: [] });
+    const result = await handleDeleteDraft(mockGmail, { workspace: "test", id: [] });
     expect(result.isError).toBe(true);
   });
 });
@@ -257,7 +257,7 @@ describe("handleListDrafts", () => {
         },
       } as never);
 
-    const result = await handleListDrafts(mockGmail, {});
+    const result = await handleListDrafts(mockGmail, { workspace: "test",});
 
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain("2 draft(s)");
@@ -278,7 +278,7 @@ describe("handleListDrafts", () => {
       data: { drafts: [], resultSizeEstimate: 0 },
     } as never);
 
-    const result = await handleListDrafts(mockGmail, {});
+    const result = await handleListDrafts(mockGmail, { workspace: "test",});
 
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain("No drafts found");
@@ -294,7 +294,7 @@ describe("handleListDrafts", () => {
       data: { drafts: [], resultSizeEstimate: 0 },
     } as never);
 
-    await handleListDrafts(mockGmail, {
+    await handleListDrafts(mockGmail, { workspace: "test",
       query: "subject:report",
       maxResults: 10,
       pageToken: "token123",
@@ -313,7 +313,7 @@ describe("handleListDrafts", () => {
       data: { resultSizeEstimate: 0 },
     } as never);
 
-    const result = await handleListDrafts(mockGmail, {});
+    const result = await handleListDrafts(mockGmail, { workspace: "test",});
 
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain("No drafts found");
@@ -342,7 +342,7 @@ describe("handleListDrafts", () => {
       } as never)
       .mockRejectedValueOnce(new Error("Not found"));
 
-    const result = await handleListDrafts(mockGmail, {});
+    const result = await handleListDrafts(mockGmail, { workspace: "test",});
 
     expect(result.isError).toBe(false);
     const data = result.structuredContent as {
@@ -368,7 +368,7 @@ describe("handleListDrafts", () => {
       },
     } as never);
 
-    const result = await handleListDrafts(mockGmail, {});
+    const result = await handleListDrafts(mockGmail, { workspace: "test",});
 
     expect(result.isError).toBe(false);
     expect(mockGmail.users.messages.get).toHaveBeenCalledTimes(1);
@@ -395,7 +395,7 @@ describe("handleListDrafts", () => {
       },
     } as never);
 
-    const result = await handleListDrafts(mockGmail, {});
+    const result = await handleListDrafts(mockGmail, { workspace: "test",});
 
     const data = result.structuredContent as {
       nextPageToken?: string;
@@ -424,7 +424,7 @@ describe("handleModifyEmail", () => {
       },
     } as never);
 
-    const result = await handleModifyEmail(mockGmail, {
+    const result = await handleModifyEmail(mockGmail, { workspace: "test",
       threadId: "thread123",
       addLabelIds: ["STARRED"],
       removeLabelIds: ["INBOX"],
@@ -449,7 +449,7 @@ describe("handleModifyEmail", () => {
       data: { id: "1234567890abcdef", messages: [{ id: "msg1" }] },
     } as never);
 
-    const result = await handleModifyEmail(mockGmail, {
+    const result = await handleModifyEmail(mockGmail, { workspace: "test",
       threadId: ["1234567890abcdef", "abcdef1234567890", "fedcba0987654321"],
       removeLabelIds: ["INBOX"],
     });
@@ -466,7 +466,7 @@ describe("handleModifyEmail", () => {
       .mockRejectedValueOnce(new Error("Requested entity was not found"))
       .mockResolvedValueOnce({ data: { id: "fedcba0987654321" } } as never);
 
-    const result = await handleModifyEmail(mockGmail, {
+    const result = await handleModifyEmail(mockGmail, { workspace: "test",
       threadId: ["1234567890abcdef", "abcdef1234567890", "fedcba0987654321"],
       removeLabelIds: ["INBOX"],
     });
@@ -484,7 +484,7 @@ describe("handleModifyEmail", () => {
       data: { id: "1234567890abcdef" },
     } as never);
 
-    const result = await handleModifyEmail(mockGmail, {
+    const result = await handleModifyEmail(mockGmail, { workspace: "test",
       threadId: ["1234567890abcdef", "BAD_ID", "not-a-hex-id", "abcdef1234567890"],
       removeLabelIds: ["INBOX"],
     });
@@ -502,7 +502,7 @@ describe("handleModifyEmail", () => {
       .mockRejectedValueOnce(new Error("Requested entity was not found"))
       .mockRejectedValueOnce(new Error("Permission denied"));
 
-    const result = await handleModifyEmail(mockGmail, {
+    const result = await handleModifyEmail(mockGmail, { workspace: "test",
       threadId: ["1234567890abcdef", "abcdef1234567890", "fedcba0987654321", "BAD_FORMAT_ID"],
       removeLabelIds: ["INBOX"],
     });
@@ -527,7 +527,7 @@ describe("handleModifyEmail", () => {
       .mockRejectedValueOnce(new Error("not found"))
       .mockRejectedValueOnce(new Error("entity was not found"));
 
-    const result = await handleModifyEmail(mockGmail, {
+    const result = await handleModifyEmail(mockGmail, { workspace: "test",
       threadId: ["1234567890abcdef", "abcdef1234567890"],
       removeLabelIds: ["INBOX"],
     });
@@ -541,7 +541,7 @@ describe("handleModifyEmail", () => {
   });
 
   it("returns error for empty threadId", async () => {
-    const result = await handleModifyEmail(mockGmail, {
+    const result = await handleModifyEmail(mockGmail, { workspace: "test",
       threadId: "",
       addLabelIds: ["STARRED"],
     });
@@ -550,7 +550,7 @@ describe("handleModifyEmail", () => {
   });
 
   it("returns error for empty array threadId", async () => {
-    const result = await handleModifyEmail(mockGmail, {
+    const result = await handleModifyEmail(mockGmail, { workspace: "test",
       threadId: [],
       addLabelIds: ["STARRED"],
     });
@@ -712,7 +712,7 @@ describe("handleSearchEmails", () => {
       },
     } as never);
 
-    const result = await handleSearchEmails(mockGmail, {
+    const result = await handleSearchEmails(mockGmail, { workspace: "test",
       query: "from:alice@example.com",
     });
 
@@ -744,7 +744,7 @@ describe("handleSearchEmails", () => {
       },
     } as never);
 
-    const result = await handleSearchEmails(mockGmail, {
+    const result = await handleSearchEmails(mockGmail, { workspace: "test",
       from: "alice@example.com",
       subject: "Test",
     });
@@ -762,7 +762,7 @@ describe("handleSearchEmails", () => {
       data: { messages: [], resultSizeEstimate: 0 },
     } as never);
 
-    const result = await handleSearchEmails(mockGmail, {
+    const result = await handleSearchEmails(mockGmail, { workspace: "test",
       from: "nobody@example.com",
     });
 
@@ -775,7 +775,7 @@ describe("handleSearchEmails", () => {
       data: { messages: [], resultSizeEstimate: 0 },
     } as never);
 
-    const result = await handleSearchEmails(mockGmail, {
+    const result = await handleSearchEmails(mockGmail, { workspace: "test",
       query: "invoice $5,149",
     });
 
@@ -790,7 +790,7 @@ describe("handleSearchEmails", () => {
       data: { messages: [], resultSizeEstimate: 0 },
     } as never);
 
-    const result = await handleSearchEmails(mockGmail, {
+    const result = await handleSearchEmails(mockGmail, { workspace: "test",
       from: "nobody@example.com",
     });
 
@@ -799,7 +799,7 @@ describe("handleSearchEmails", () => {
   });
 
   it("returns validation error when no params provided", async () => {
-    const result = await handleSearchEmails(mockGmail, {});
+    const result = await handleSearchEmails(mockGmail, { workspace: "test",});
 
     expect(result.isError).toBe(true);
   });
@@ -815,7 +815,7 @@ describe("handleDeleteEmail", () => {
   it("deletes a single email by id", async () => {
     vi.mocked(mockGmail.users.messages.delete).mockResolvedValue({} as never);
 
-    const result = await handleDeleteEmail(mockGmail, { id: "msg123" });
+    const result = await handleDeleteEmail(mockGmail, { workspace: "test", id: "msg123" });
 
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain("msg123");
@@ -837,7 +837,7 @@ describe("handleDeleteEmail", () => {
     vi.mocked(mockGmail.users.messages.batchDelete).mockResolvedValue({} as never);
 
     const ids = ["msg1", "msg2", "msg3"];
-    const result = await handleDeleteEmail(mockGmail, { id: ids });
+    const result = await handleDeleteEmail(mockGmail, { workspace: "test", id: ids });
 
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain("3 email(s)");
@@ -857,7 +857,7 @@ describe("handleDeleteEmail", () => {
     vi.mocked(mockGmail.users.messages.delete).mockResolvedValue({} as never);
 
     const ids = ["msg1", "msg2"];
-    const result = await handleDeleteEmail(mockGmail, { id: ids });
+    const result = await handleDeleteEmail(mockGmail, { workspace: "test", id: ids });
 
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain("2 email(s)");
@@ -871,7 +871,7 @@ describe("handleDeleteEmail", () => {
     authError.response = { status: 401 };
     vi.mocked(mockGmail.users.messages.batchDelete).mockRejectedValue(authError);
 
-    await expect(handleDeleteEmail(mockGmail, { id: ["msg1", "msg2"] })).rejects.toThrow(
+    await expect(handleDeleteEmail(mockGmail, { workspace: "test", id: ["msg1", "msg2"] })).rejects.toThrow(
       "Unauthorized",
     );
     expect(mockGmail.users.messages.delete).not.toHaveBeenCalled();
@@ -886,7 +886,7 @@ describe("handleDeleteEmail", () => {
       .mockRejectedValueOnce(new Error("Requested entity was not found"))
       .mockRejectedValueOnce(new Error("Permission denied"));
 
-    const result = await handleDeleteEmail(mockGmail, {
+    const result = await handleDeleteEmail(mockGmail, { workspace: "test",
       id: ["msg1", "msg2", "msg3"],
     });
 
@@ -912,7 +912,7 @@ describe("handleDeleteEmail", () => {
       .mockRejectedValueOnce(new Error("not found"))
       .mockRejectedValueOnce(new Error("not found"));
 
-    const result = await handleDeleteEmail(mockGmail, {
+    const result = await handleDeleteEmail(mockGmail, { workspace: "test",
       id: ["msg1", "msg2"],
     });
 
@@ -926,12 +926,12 @@ describe("handleDeleteEmail", () => {
   });
 
   it("returns validation error for empty id", async () => {
-    const result = await handleDeleteEmail(mockGmail, { id: "" });
+    const result = await handleDeleteEmail(mockGmail, { workspace: "test", id: "" });
     expect(result.isError).toBe(true);
   });
 
   it("returns validation error for empty array", async () => {
-    const result = await handleDeleteEmail(mockGmail, { id: [] });
+    const result = await handleDeleteEmail(mockGmail, { workspace: "test", id: [] });
     expect(result.isError).toBe(true);
   });
 });
@@ -989,7 +989,7 @@ describe("handleReadEmail", () => {
       ],
     });
 
-    const result = await handleReadEmail(mockGmail, {
+    const result = await handleReadEmail(mockGmail, { workspace: "test",
       id: "msg1",
     });
 
@@ -1015,7 +1015,7 @@ describe("handleReadEmail", () => {
       ],
     });
 
-    const result = await handleReadEmail(mockGmail, {
+    const result = await handleReadEmail(mockGmail, { workspace: "test",
       id: "msg1",
     });
 
@@ -1028,7 +1028,7 @@ describe("handleReadEmail", () => {
   it("omits attachments line when no attachments", async () => {
     mockMessage({ parts: [] });
 
-    const result = await handleReadEmail(mockGmail, {
+    const result = await handleReadEmail(mockGmail, { workspace: "test",
       id: "msg1",
     });
 
@@ -1047,7 +1047,7 @@ describe("handleReadEmail", () => {
       ],
     });
 
-    const result = await handleReadEmail(mockGmail, {
+    const result = await handleReadEmail(mockGmail, { workspace: "test",
       id: "msg1",
     });
 
