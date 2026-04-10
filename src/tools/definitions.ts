@@ -3877,7 +3877,7 @@ function withWorkspace(tools: ToolDefinition[]): ToolDefinition[] {
         workspace: WORKSPACE_PROPERTY,
         ...tool.inputSchema.properties,
       },
-      required: ["workspace", ...(tool.inputSchema.required || [])],
+      required: tool.inputSchema.required || [],
     },
   }));
 }
