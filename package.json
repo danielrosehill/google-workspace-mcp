@@ -28,6 +28,9 @@
     "type": "git",
     "url": "git+https://github.com/danielrosehill/google-workspace-mcp.git"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": {
     "google-workspace-mcp": "dist/index.js"
   },
