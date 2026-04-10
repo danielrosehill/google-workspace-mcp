@@ -760,14 +760,17 @@ s.setRequestHandler(CallToolRequestSchema, async (request) => {
           mergedArgs.from = `${wsEntry.senderName} <${wsEntry.email}>`;
         }
         if (mergedArgs.skipSignature !== true) {
-          if (wsEntry.signature && typeof mergedArgs.body === "string") {
-            mergedArgs.body = `${mergedArgs.body}\n\n---\n${wsEntry.signature}`;
+          const originalBody = typeof mergedArgs.body === "string" ? mergedArgs.body : "";
+          // Append plain text signature to body
+          if (wsEntry.signature && originalBody) {
+            mergedArgs.body = `${originalBody}\n\n---\n${wsEntry.signature}`;
           }
+          // Append HTML signature
           if (wsEntry.signatureHtml && typeof mergedArgs.html === "string") {
             mergedArgs.html = `${mergedArgs.html}<br><hr style="border:none;border-top:1px solid #ccc;margin:16px 0">${wsEntry.signatureHtml}`;
-          } else if (wsEntry.signatureHtml && !mergedArgs.html && typeof mergedArgs.body === "string") {
-            // Auto-generate HTML version with signature when only plain text body is provided
-            const htmlBody = (mergedArgs.body as string).replace(/\n/g, "<br>");
+          } else if (wsEntry.signatureHtml && !mergedArgs.html && originalBody) {
+            // Auto-generate HTML version from original body (before plain text sig)
+            const htmlBody = originalBody.replace(/\n/g, "<br>");
             mergedArgs.html = `${htmlBody}<br><hr style="border:none;border-top:1px solid #ccc;margin:16px 0">${wsEntry.signatureHtml}`;
           }
         }
