@@ -2,6 +2,13 @@
 
 MCP server providing Claude access to Google Drive, Docs, Sheets, Slides, Calendar, Gmail, and Contacts.
 
+Fork of `@dguido/google-workspace-mcp` with added support for:
+
+- **Multi-workspace**: Serve multiple Google accounts from a single process, selected by URL path (`/mcp/personal`, `/mcp/business`)
+- **Email attachments**: Send and receive file attachments via Gmail
+- **Workspace signatures**: Auto-append plain text and HTML signatures per workspace
+- **Sender display name**: Auto-inject `From` header with display name from workspace config
+
 ## Quick Start
 
 ### 1. Set Up Google Cloud
@@ -21,7 +28,7 @@ MCP server providing Claude access to Google Drive, Docs, Sheets, Slides, Calend
   "mcpServers": {
     "google-workspace": {
       "command": "npx",
-      "args": ["@dguido/google-workspace-mcp"],
+      "args": ["@danielrosehill/google-workspace-mcp"],
       "env": {
         "GOOGLE_CLIENT_ID": "YOUR_CLIENT_ID.apps.googleusercontent.com",
         "GOOGLE_CLIENT_SECRET": "YOUR_CLIENT_SECRET",
@@ -119,7 +126,7 @@ For LLM-optimized responses that reduce token usage by 20-50%, enable TOON forma
   "mcpServers": {
     "google-workspace": {
       "command": "npx",
-      "args": ["@dguido/google-workspace-mcp"],
+      "args": ["@danielrosehill/google-workspace-mcp"],
       "env": {
         "GOOGLE_WORKSPACE_SERVICES": "drive,gmail,calendar",
         "GOOGLE_WORKSPACE_TOON_FORMAT": "true"
@@ -142,7 +149,7 @@ To enable additional services, add them to `GOOGLE_WORKSPACE_SERVICES`:
   "mcpServers": {
     "google-workspace": {
       "command": "npx",
-      "args": ["@dguido/google-workspace-mcp"],
+      "args": ["@danielrosehill/google-workspace-mcp"],
       "env": {
         "GOOGLE_WORKSPACE_SERVICES": "drive,gmail,calendar,docs,sheets,slides"
       }
@@ -158,6 +165,68 @@ To enable additional services, add them to `GOOGLE_WORKSPACE_SERVICES`:
 - When you limit services, only the OAuth scopes for those services are requested during authentication. If you change enabled services, re-authenticate to update granted scopes.
 
 See [Advanced Configuration](docs/ADVANCED.md) for named profiles, multi-account setup, and environment variables.
+
+### Multi-Workspace Mode
+
+Serve multiple Google accounts from a single process. Create a `workspaces.json`:
+
+```json
+{
+  "personal": {
+    "email": "you@gmail.com",
+    "senderName": "Your Name",
+    "signature": "Your Name\nhttps://yoursite.com",
+    "signatureHtml": "<b>Your Name</b><br><a href=\"https://yoursite.com\">yoursite.com</a>",
+    "clientCredentials": "/path/to/personal/client.json",
+    "tokenPath": "/path/to/personal/token.json"
+  },
+  "business": {
+    "email": "you@company.com",
+    "senderName": "Your Name",
+    "signature": "Your Name\nCompany — https://company.com",
+    "signatureHtml": "<b>Your Name</b><br><a href=\"https://company.com\">Company</a>",
+    "clientCredentials": "/path/to/business/client.json",
+    "tokenPath": "/path/to/business/token.json"
+  }
+}
+```
+
+Start the server with HTTP transport:
+
+```bash
+GWS_WORKSPACES_CONFIG=/path/to/workspaces.json \
+GWS_MCP_PORT=3200 \
+GWS_MCP_HOST=0.0.0.0 \
+npx @danielrosehill/google-workspace-mcp start
+```
+
+Connect clients to workspace-specific URLs:
+- `http://host:3200/mcp/personal` — routes to the personal workspace
+- `http://host:3200/mcp/business` — routes to the business workspace
+
+Each workspace gets its own OAuth tokens, sender name, and signature. The `workspace` parameter is auto-injected from the URL path — clients don't need to include it in tool calls.
+
+#### Workspace Config Fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `email` | yes | Google account email |
+| `clientCredentials` | yes | Path to OAuth `client.json` |
+| `tokenPath` | yes | Path to store OAuth tokens |
+| `label` | no | Display label (defaults to workspace name) |
+| `senderName` | no | Display name for outgoing emails (e.g., "Daniel Rosehill") |
+| `signature` | no | Plain text signature auto-appended to email body |
+| `signatureHtml` | no | HTML signature auto-appended to email HTML part |
+
+### Email Attachments
+
+Send emails with file attachments:
+
+```
+Send an email to user@example.com with subject "Report" and attach the Q1 report PDF.
+```
+
+Attachments are passed as base64-encoded content with filename and MIME type. The server also supports downloading attachments from received emails via the `download_attachment` tool.
 
 ## Available Tools
 
