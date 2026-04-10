@@ -752,15 +752,29 @@ s.setRequestHandler(CallToolRequestSchema, async (request) => {
       };
     }
 
-    // Inject From header for email tools when workspace has a senderName
-    if (workspace && !mergedArgs.from && (toolName === "send_email" || toolName === "draft_email")) {
+    // Inject workspace-level email defaults (From header, signature)
+    if (workspace && (toolName === "send_email" || toolName === "draft_email")) {
       try {
         const wsEntry = await getWorkspace(workspace);
-        if (wsEntry.senderName) {
+        if (!mergedArgs.from && wsEntry.senderName) {
           mergedArgs.from = `${wsEntry.senderName} <${wsEntry.email}>`;
         }
+        if (mergedArgs.skipSignature !== true) {
+          if (wsEntry.signature && typeof mergedArgs.body === "string") {
+            mergedArgs.body = `${mergedArgs.body}\n\n---\n${wsEntry.signature}`;
+          }
+          if (wsEntry.signatureHtml && typeof mergedArgs.html === "string") {
+            mergedArgs.html = `${mergedArgs.html}<br><hr style="border:none;border-top:1px solid #ccc;margin:16px 0">${wsEntry.signatureHtml}`;
+          } else if (wsEntry.signatureHtml && !mergedArgs.html && typeof mergedArgs.body === "string") {
+            // Auto-generate HTML version with signature when only plain text body is provided
+            const htmlBody = (mergedArgs.body as string).replace(/\n/g, "<br>");
+            mergedArgs.html = `${htmlBody}<br><hr style="border:none;border-top:1px solid #ccc;margin:16px 0">${wsEntry.signatureHtml}`;
+          }
+        }
+        // Remove skipSignature before passing to handler (not a real schema field)
+        delete mergedArgs.skipSignature;
       } catch {
-        // Non-fatal: if workspace lookup fails here, the handler will still work without From
+        // Non-fatal: handler will still work without From/signature
       }
     }
 

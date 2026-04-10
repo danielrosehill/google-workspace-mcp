@@ -12,6 +12,8 @@ export interface WorkspaceEntry {
   clientCredentials: string;
   tokenPath: string;
   senderName?: string;
+  signature?: string;
+  signatureHtml?: string;
 }
 
 interface WorkspacesFileContent {
@@ -44,6 +46,9 @@ function validateEntry(name: string, raw: Record<string, unknown>): WorkspaceEnt
   const email = raw.email;
   const clientCredentials = raw.clientCredentials;
   const tokenPath = raw.tokenPath;
+  const senderName = typeof raw.senderName === "string" ? raw.senderName : undefined;
+  const signature = typeof raw.signature === "string" ? raw.signature : undefined;
+  const signatureHtml = typeof raw.signatureHtml === "string" ? raw.signatureHtml : undefined;
 
   if (typeof email !== "string" || !email.includes("@")) {
     throw new Error(`Workspace "${name}": email is required and must be a valid address`);
@@ -60,6 +65,9 @@ function validateEntry(name: string, raw: Record<string, unknown>): WorkspaceEnt
     email,
     clientCredentials: path.resolve(clientCredentials),
     tokenPath: path.resolve(tokenPath),
+    senderName,
+    signature,
+    signatureHtml,
   };
 }
 
