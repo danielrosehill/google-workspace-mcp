@@ -61,7 +61,7 @@ import {
 } from "./auth/utils.js";
 
 // Import all tool definitions
-import { getAllTools, gmailTools } from "./tools/index.js";
+import { getAllTools } from "./tools/index.js";
 
 // Import error utilities
 import { mapGoogleError, isGoogleApiError, GoogleAuthError } from "./errors/index.js";
@@ -689,7 +689,7 @@ function createToolRegistry(): Record<string, ToolHandler> {
 }
 
 const toolRegistry = createToolRegistry();
-const GMAIL_TOOL_NAMES = new Set(gmailTools.map((t) => t.name));
+
 
 // -----------------------------------------------------------------------------
 // TOOL CALL REQUEST HANDLER
@@ -713,16 +713,15 @@ s.setRequestHandler(CallToolRequestSchema, async (request) => {
     const meta = (request.params as { _meta?: { progressToken?: string | number } })._meta;
     const context: HandlerContext = { server: s, progressToken: meta?.progressToken };
 
-    // Gmail tools use per-workspace auth
-    if (GMAIL_TOOL_NAMES.has(toolName)) {
-      const typedArgs = args as { workspace?: string } | undefined;
-      const workspace = typedArgs?.workspace;
-      if (!workspace) {
-        return errorResponse("workspace parameter is required for Gmail tools");
-      }
+    const typedArgs = args as { workspace?: string } | undefined;
+    const workspace = typedArgs?.workspace;
 
+    let services: ToolServices;
+
+    if (workspace) {
+      // Workspace-based auth: all tools can use this
       const ws = await getWorkspaceServices(workspace);
-      const services: ToolServices = {
+      services = {
         drive: ws.drive,
         docs: ws.docs,
         sheets: ws.sheets,
@@ -732,27 +731,20 @@ s.setRequestHandler(CallToolRequestSchema, async (request) => {
         people: ws.people,
         context,
       };
-
-      const handler = toolRegistry[toolName];
-      if (!handler) {
-        return errorResponse(`Unknown tool: ${toolName}`);
-      }
-      return handler(services, args);
+    } else {
+      // Legacy singleton auth fallback (stdio / single-account mode)
+      await ensureAuthenticated();
+      services = {
+        drive: drive!,
+        docs: getDocsService(authClient!),
+        sheets: getSheetsService(authClient!),
+        slides: getSlidesService(authClient!),
+        calendar: getCalendarService(authClient!),
+        gmail: getGmailService(authClient!),
+        people: getPeopleService(authClient!),
+        context,
+      };
     }
-
-    // Non-Gmail tools use legacy singleton auth
-    await ensureAuthenticated();
-
-    const services: ToolServices = {
-      drive: drive!,
-      docs: getDocsService(authClient!),
-      sheets: getSheetsService(authClient!),
-      slides: getSlidesService(authClient!),
-      calendar: getCalendarService(authClient!),
-      gmail: getGmailService(authClient!),
-      people: getPeopleService(authClient!),
-      context,
-    };
 
     const handler = toolRegistry[toolName];
     if (!handler) {

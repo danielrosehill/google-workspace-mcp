@@ -3889,7 +3889,7 @@ export const SERVICE_TOOL_MAP: Record<ServiceName, ToolDefinition[]> = {
   sheets: sheetsTools,
   slides: slidesTools,
   calendar: calendarTools,
-  gmail: withWorkspace(gmailTools),
+  gmail: gmailTools,
   contacts: contactsTools,
 };
 
@@ -4092,8 +4092,9 @@ export function getAllTools(): ToolDefinition[] {
   }
 
   if (isReadOnlyMode()) {
-    return tools.filter((t) => t.readOnly === true);
+    return withWorkspace(tools.filter((t) => t.readOnly === true));
   }
 
-  return tools;
+  // Inject workspace property into every tool schema
+  return withWorkspace(tools);
 }
