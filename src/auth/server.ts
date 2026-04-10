@@ -397,8 +397,9 @@ export class AuthServer {
     return new Promise<number>((resolve, reject) => {
       const server = this.createServer();
 
-      // Bind to port 0 on 127.0.0.1 only (RFC 8252 §7.3)
-      server.listen(0, "127.0.0.1", () => {
+      // Bind to GWS_AUTH_PORT or port 0 on 127.0.0.1 only (RFC 8252 §7.3)
+      const authPort = process.env.GWS_AUTH_PORT ? parseInt(process.env.GWS_AUTH_PORT, 10) : 0;
+      server.listen(authPort, "127.0.0.1", () => {
         this.server = server;
         const address = server.address();
         if (typeof address === "object" && address !== null) {

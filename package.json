@@ -1,6 +1,6 @@
 {
   "name": "@danielrosehill/google-workspace-mcp",
-  "version": "4.1.1",
+  "version": "4.1.2",
   "description": "Multi-workspace Google Workspace MCP Server — secure access to Gmail, Drive, Docs, Sheets, Calendar via MCP with per-workspace OAuth and streamable HTTP transport",
   "keywords": [
     "ai",
