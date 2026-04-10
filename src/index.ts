@@ -12,7 +12,7 @@ import {
   GetPromptRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { google } from "googleapis";
-import type { drive_v3 } from "googleapis";
+import type { drive_v3, docs_v1, sheets_v4, slides_v1, calendar_v3, gmail_v1, people_v1 } from "googleapis";
 import {
   authenticate,
   AuthServer,
@@ -39,6 +39,7 @@ import {
   getGmailService,
   getPeopleService,
 } from "./utils/index.js";
+import type { ToolResponse } from "./utils/index.js";
 
 // Import service configuration
 import {
@@ -261,28 +262,36 @@ export function getLastAuthError(): string | null {
 }
 
 // -----------------------------------------------------------------------------
-// SERVER SETUP
+// SERVER FACTORY
 // -----------------------------------------------------------------------------
 
-const server = new Server(
-  {
-    name: "google-workspace-mcp",
-    version: VERSION,
-  },
-  {
-    instructions:
-      "On any tool error, call get_status for diagnostics " + "before asking the user to debug.",
-    capabilities: {
-      resources: {},
-      tools: {
-        listChanged: true,
-      },
-      prompts: {
-        listChanged: true,
+function createMcpServer(): Server {
+  const s = new Server(
+    {
+      name: "google-workspace-mcp",
+      version: VERSION,
+    },
+    {
+      instructions:
+        "On any tool error, call get_status for diagnostics " + "before asking the user to debug.",
+      capabilities: {
+        resources: {},
+        tools: {
+          listChanged: true,
+        },
+        prompts: {
+          listChanged: true,
+        },
       },
     },
-  },
-);
+  );
+
+  registerHandlers(s);
+  return s;
+}
+
+// Singleton for stdio mode (set in main)
+let server: Server;
 
 // -----------------------------------------------------------------------------
 // AUTHENTICATION HELPER
@@ -332,7 +341,9 @@ async function ensureAuthenticated() {
 // MCP REQUEST HANDLERS
 // -----------------------------------------------------------------------------
 
-server.setRequestHandler(ListResourcesRequestSchema, async (request) => {
+function registerHandlers(s: Server): void {
+
+s.setRequestHandler(ListResourcesRequestSchema, async (request) => {
   await ensureAuthenticated();
   log("Handling ListResources request", { params: request.params });
   const pageSize = 10;
@@ -369,7 +380,7 @@ server.setRequestHandler(ListResourcesRequestSchema, async (request) => {
   };
 });
 
-server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+s.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   await ensureAuthenticated();
   log("Handling ReadResource request", { uri: request.params.uri });
   const fileId = request.params.uri.replace("gdrive:///", "");
@@ -455,7 +466,7 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   }
 });
 
-server.setRequestHandler(ListToolsRequestSchema, async () => {
+s.setRequestHandler(ListToolsRequestSchema, async () => {
   return { tools: getAllTools() };
 });
 
@@ -463,7 +474,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 // PROMPT REQUEST HANDLERS
 // -----------------------------------------------------------------------------
 
-server.setRequestHandler(ListPromptsRequestSchema, async () => {
+s.setRequestHandler(ListPromptsRequestSchema, async () => {
   log("Handling ListPrompts request");
   return {
     prompts: PROMPTS.map((prompt) => ({
@@ -474,7 +485,7 @@ server.setRequestHandler(ListPromptsRequestSchema, async () => {
   };
 });
 
-server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+s.setRequestHandler(GetPromptRequestSchema, async (request) => {
   log("Handling GetPrompt request", { name: request.params.name });
 
   const promptName = request.params.name;
@@ -496,9 +507,6 @@ server.setRequestHandler(GetPromptRequestSchema, async (request) => {
 // -----------------------------------------------------------------------------
 // TOOL REGISTRY
 // -----------------------------------------------------------------------------
-
-import type { ToolResponse } from "./utils/index.js";
-import type { docs_v1, sheets_v4, slides_v1, calendar_v3, gmail_v1, people_v1 } from "googleapis";
 
 interface ToolServices {
   drive: drive_v3.Drive;
@@ -687,7 +695,7 @@ const GMAIL_TOOL_NAMES = new Set(gmailTools.map((t) => t.name));
 // TOOL CALL REQUEST HANDLER
 // -----------------------------------------------------------------------------
 
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
+s.setRequestHandler(CallToolRequestSchema, async (request) => {
   const toolName = request.params.name;
   const args = request.params.arguments;
 
@@ -703,7 +711,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   try {
     const meta = (request.params as { _meta?: { progressToken?: string | number } })._meta;
-    const context: HandlerContext = { server, progressToken: meta?.progressToken };
+    const context: HandlerContext = { server: s, progressToken: meta?.progressToken };
 
     // Gmail tools use per-workspace auth
     if (GMAIL_TOOL_NAMES.has(toolName)) {
@@ -772,6 +780,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     return errorResponse(message + hint);
   }
 });
+
+} // end registerHandlers
 
 // -----------------------------------------------------------------------------
 // CLI HELPER FUNCTIONS
@@ -1011,30 +1021,59 @@ async function main() {
         const httpHost = process.env.GWS_MCP_HOST || "127.0.0.1";
 
         if (httpPort) {
-          // Streamable HTTP transport for aggregator connectivity
-          const httpTransport = new StreamableHTTPServerTransport({
-            sessionIdGenerator: () => crypto.randomUUID(),
-          });
-          await server.connect(httpTransport);
+          // Multi-session HTTP: each client gets its own Server + Transport pair
+          const sessions = new Map<string, { server: Server; transport: StreamableHTTPServerTransport }>();
 
-          const httpServer = createHttpServer((req, res) => {
-            httpTransport.handleRequest(req, res);
+          const httpServer = createHttpServer(async (req, res) => {
+            const sessionId = req.headers["mcp-session-id"] as string | undefined;
+
+            if (sessionId && sessions.has(sessionId)) {
+              // Route to existing session
+              const session = sessions.get(sessionId)!;
+              await session.transport.handleRequest(req, res);
+              return;
+            }
+
+            // New session: create a fresh Server + Transport pair
+            const transport = new StreamableHTTPServerTransport({
+              sessionIdGenerator: () => crypto.randomUUID(),
+            });
+            const sessionServer = createMcpServer();
+            await sessionServer.connect(transport);
+
+            // Track the session once the transport assigns an ID
+            const newSessionId = transport.sessionId;
+            if (newSessionId) {
+              sessions.set(newSessionId, { server: sessionServer, transport });
+
+              // Clean up on session close
+              transport.onclose = () => {
+                sessions.delete(newSessionId);
+                log("Session closed", { sessionId: newSessionId, activeSessions: sessions.size });
+              };
+            }
+
+            await transport.handleRequest(req, res);
           });
 
           httpServer.listen(httpPort, httpHost, () => {
-            log(`HTTP transport listening on ${httpHost}:${httpPort}`);
+            log(`HTTP transport listening on ${httpHost}:${httpPort} (multi-session)`);
           });
 
-          // Graceful shutdown closes both
+          // Graceful shutdown closes all sessions
           const shutdown = async () => {
             httpServer.close();
-            await server.close();
+            for (const [id, session] of sessions) {
+              await session.server.close();
+              sessions.delete(id);
+            }
             process.exit(0);
           };
           process.on("SIGINT", shutdown);
           process.on("SIGTERM", shutdown);
         } else {
           // Stdio transport for local development
+          server = createMcpServer();
           const transport = new StdioServerTransport();
           await server.connect(transport);
 
