@@ -713,8 +713,14 @@ s.setRequestHandler(CallToolRequestSchema, async (request) => {
     const meta = (request.params as { _meta?: { progressToken?: string | number } })._meta;
     const context: HandlerContext = { server: s, progressToken: meta?.progressToken };
 
-    const typedArgs = args as { workspace?: string } | undefined;
-    const workspace = typedArgs?.workspace || defaultWorkspace;
+    // Inject defaultWorkspace (from path-based URL) into args so downstream
+    // Zod schemas that require `workspace` pass validation even when the
+    // caller relies on the URL path instead of an explicit parameter.
+    const mergedArgs: Record<string, unknown> = { ...(args ?? {}) };
+    if (!mergedArgs.workspace && defaultWorkspace) {
+      mergedArgs.workspace = defaultWorkspace;
+    }
+    const workspace = (mergedArgs.workspace as string) || defaultWorkspace;
 
     let services: ToolServices;
 
@@ -751,7 +757,7 @@ s.setRequestHandler(CallToolRequestSchema, async (request) => {
       return errorResponse(`Unknown tool: ${toolName}`);
     }
 
-    return handler(services, args);
+    return handler(services, mergedArgs);
   } catch (error: unknown) {
     // Check if it's a GoogleAuthError (already mapped)
     if (error instanceof GoogleAuthError) {
