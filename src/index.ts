@@ -1041,7 +1041,10 @@ async function main() {
             const sessionServer = createMcpServer();
             await sessionServer.connect(transport);
 
-            // Track the session once the transport assigns an ID
+            // Handle the initialize request (this assigns the session ID)
+            await transport.handleRequest(req, res);
+
+            // Register the session so subsequent requests are routed correctly
             const newSessionId = transport.sessionId;
             if (newSessionId) {
               sessions.set(newSessionId, { server: sessionServer, transport });
@@ -1052,8 +1055,6 @@ async function main() {
                 log("Session closed", { sessionId: newSessionId, activeSessions: sessions.size });
               };
             }
-
-            await transport.handleRequest(req, res);
           });
 
           httpServer.listen(httpPort, httpHost, () => {
