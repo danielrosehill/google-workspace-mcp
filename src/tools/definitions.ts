@@ -2913,15 +2913,16 @@ export const gmailTools: ToolDefinition[] = [
         replyTo: { type: "string", description: "Reply-to address" },
         attachments: {
           type: "array",
-          description: "File attachments",
+          description: "File attachments. Provide either content (base64) or filePath (server reads the file).",
           items: {
             type: "object",
             properties: {
               filename: { type: "string" },
               content: { type: "string", description: "Base64-encoded content" },
+              filePath: { type: "string", description: "Absolute file path on the server (auto-encoded)" },
               mimeType: { type: "string" },
             },
-            required: ["filename", "content"],
+            required: ["filename"],
           },
         },
         threadId: { type: "string", description: "Thread ID to reply to" },

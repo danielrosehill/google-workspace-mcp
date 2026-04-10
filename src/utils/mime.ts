@@ -3,6 +3,15 @@
  * Gmail requires raw email content to be base64url encoded.
  */
 
+import { readFileSync } from "node:fs";
+
+export interface EmailAttachment {
+  filename: string;
+  content?: string; // Base64 encoded
+  filePath?: string; // Absolute server-side path (read automatically)
+  mimeType?: string;
+}
+
 export interface EmailOptions {
   to: string[];
   subject: string;
@@ -12,13 +21,20 @@ export interface EmailOptions {
   bcc?: string[];
   replyTo?: string;
   from?: string; // e.g. "Daniel Rosehill <daniel@example.com>"
-  attachments?: Array<{
-    filename: string;
-    content: string; // Base64 encoded
-    mimeType?: string;
-  }>;
+  attachments?: EmailAttachment[];
   inReplyTo?: string;
   references?: string;
+}
+
+/**
+ * Resolve attachment content: if filePath is provided, read and base64-encode it.
+ */
+function resolveAttachmentContent(attachment: EmailAttachment): string {
+  if (attachment.content) return attachment.content;
+  if (attachment.filePath) {
+    return readFileSync(attachment.filePath).toString("base64");
+  }
+  throw new Error(`Attachment "${attachment.filename}" has neither content nor filePath`);
 }
 
 /**
@@ -150,12 +166,13 @@ export function buildMimeMessage(options: EmailOptions): string {
     // Attachments
     for (const attachment of attachments!) {
       const mimeType = attachment.mimeType || detectMimeType(attachment.filename);
+      const content = resolveAttachmentContent(attachment);
       parts.push(`--${mixedBoundary}`);
       parts.push(`Content-Type: ${mimeType}; name="${attachment.filename}"`);
       parts.push("Content-Transfer-Encoding: base64");
       parts.push(`Content-Disposition: attachment; filename="${attachment.filename}"`);
       parts.push("");
-      parts.push(attachment.content);
+      parts.push(content);
     }
 
     parts.push(`--${mixedBoundary}--`);
