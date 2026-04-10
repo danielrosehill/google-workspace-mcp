@@ -118,6 +118,7 @@ export const SendEmailSchema = z.object({
   cc: z.array(z.string().email()).optional().describe("CC recipients"),
   bcc: z.array(z.string().email()).optional().describe("BCC recipients"),
   replyTo: z.string().email().optional().describe("Reply-to address"),
+  from: z.string().optional().describe("From header (auto-injected from workspace senderName)"),
   attachments: z.array(AttachmentSchema).optional().describe("File attachments"),
   threadId: z.string().optional().describe("Thread ID to reply to"),
   inReplyTo: z.string().optional().describe("Message-ID header for threading"),

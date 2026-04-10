@@ -163,7 +163,7 @@ function extractAttachments(
 export async function handleSendEmail(gmail: gmail_v1.Gmail, args: unknown): Promise<ToolResponse> {
   const validation = validateArgs(SendEmailSchema, args);
   if (!validation.success) return validation.response;
-  const { to, subject, body, html, cc, bcc, replyTo, attachments, threadId, inReplyTo } =
+  const { to, subject, body, html, cc, bcc, replyTo, from, attachments, threadId, inReplyTo } =
     validation.data;
 
   const raw = buildMimeMessage({
@@ -174,6 +174,7 @@ export async function handleSendEmail(gmail: gmail_v1.Gmail, args: unknown): Pro
     cc,
     bcc,
     replyTo,
+    from,
     attachments,
     inReplyTo,
   });

@@ -752,6 +752,18 @@ s.setRequestHandler(CallToolRequestSchema, async (request) => {
       };
     }
 
+    // Inject From header for email tools when workspace has a senderName
+    if (workspace && !mergedArgs.from && (toolName === "send_email" || toolName === "draft_email")) {
+      try {
+        const wsEntry = await getWorkspace(workspace);
+        if (wsEntry.senderName) {
+          mergedArgs.from = `${wsEntry.senderName} <${wsEntry.email}>`;
+        }
+      } catch {
+        // Non-fatal: if workspace lookup fails here, the handler will still work without From
+      }
+    }
+
     const handler = toolRegistry[toolName];
     if (!handler) {
       return errorResponse(`Unknown tool: ${toolName}`);

@@ -11,6 +11,7 @@ export interface WorkspaceEntry {
   email: string;
   clientCredentials: string;
   tokenPath: string;
+  senderName?: string;
 }
 
 interface WorkspacesFileContent {

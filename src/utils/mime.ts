@@ -11,6 +11,7 @@ export interface EmailOptions {
   cc?: string[];
   bcc?: string[];
   replyTo?: string;
+  from?: string; // e.g. "Daniel Rosehill <daniel@example.com>"
   attachments?: Array<{
     filename: string;
     content: string; // Base64 encoded
@@ -74,17 +75,23 @@ function detectMimeType(filename: string): string {
  * Returns a base64url-encoded string ready for the Gmail API.
  */
 export function buildMimeMessage(options: EmailOptions): string {
-  const { to, subject, body, html, cc, bcc, replyTo, attachments, inReplyTo, references } = options;
+  const { to, subject, body, html, cc, bcc, replyTo, from, attachments, inReplyTo, references } = options;
 
   const hasHtml = !!html;
   const hasAttachments = attachments && attachments.length > 0;
 
   // Build headers
-  const headers: string[] = [
+  const headers: string[] = [];
+
+  if (from) {
+    headers.push(`From: ${from}`);
+  }
+
+  headers.push(
     `To: ${to.join(", ")}`,
     `Subject: =?UTF-8?B?${Buffer.from(subject).toString("base64")}?=`,
     "MIME-Version: 1.0",
-  ];
+  );
 
   if (cc && cc.length > 0) {
     headers.push(`Cc: ${cc.join(", ")}`);
