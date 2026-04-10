@@ -265,7 +265,7 @@ export function getLastAuthError(): string | null {
 // SERVER FACTORY
 // -----------------------------------------------------------------------------
 
-function createMcpServer(): Server {
+function createMcpServer(defaultWorkspace?: string): Server {
   const s = new Server(
     {
       name: "google-workspace-mcp",
@@ -286,7 +286,7 @@ function createMcpServer(): Server {
     },
   );
 
-  registerHandlers(s);
+  registerHandlers(s, defaultWorkspace);
   return s;
 }
 
@@ -341,7 +341,7 @@ async function ensureAuthenticated() {
 // MCP REQUEST HANDLERS
 // -----------------------------------------------------------------------------
 
-function registerHandlers(s: Server): void {
+function registerHandlers(s: Server, defaultWorkspace?: string): void {
 
 s.setRequestHandler(ListResourcesRequestSchema, async (request) => {
   await ensureAuthenticated();
@@ -714,7 +714,7 @@ s.setRequestHandler(CallToolRequestSchema, async (request) => {
     const context: HandlerContext = { server: s, progressToken: meta?.progressToken };
 
     const typedArgs = args as { workspace?: string } | undefined;
-    const workspace = typedArgs?.workspace;
+    const workspace = typedArgs?.workspace || defaultWorkspace;
 
     let services: ToolServices;
 
@@ -1014,6 +1014,7 @@ async function main() {
 
         if (httpPort) {
           // Multi-session HTTP: each client gets its own Server + Transport pair
+          // URL path determines default workspace: /mcp/personal → workspace "personal"
           const sessions = new Map<string, { server: Server; transport: StreamableHTTPServerTransport }>();
 
           const httpServer = createHttpServer(async (req, res) => {
@@ -1026,12 +1027,21 @@ async function main() {
               return;
             }
 
+            // Parse workspace from URL path: /mcp/<workspace> → workspace name
+            const urlPath = req.url || "/mcp";
+            const pathMatch = urlPath.match(/^\/mcp\/([a-zA-Z0-9_-]+)/);
+            const pathWorkspace = pathMatch?.[1];
+
             // New session: create a fresh Server + Transport pair
             const transport = new StreamableHTTPServerTransport({
               sessionIdGenerator: () => crypto.randomUUID(),
             });
-            const sessionServer = createMcpServer();
+            const sessionServer = createMcpServer(pathWorkspace);
             await sessionServer.connect(transport);
+
+            if (pathWorkspace) {
+              log("New session with path-based workspace", { workspace: pathWorkspace });
+            }
 
             // Handle the initialize request (this assigns the session ID)
             await transport.handleRequest(req, res);
