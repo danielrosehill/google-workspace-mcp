@@ -1018,6 +1018,20 @@ export async function handleUploadFile(
     return errorResponse("Either sourcePath or base64Content is required");
   }
 
+  // Validate sourcePath exists before attempting upload
+  if (data.sourcePath) {
+    const fs = await import("fs");
+    if (!fs.existsSync(data.sourcePath)) {
+      return errorResponse(
+        `File not found at sourcePath: ${data.sourcePath}. ` +
+          `Note: sourcePath must be a path on the MCP server's local filesystem. ` +
+          `For remote clients, either: (1) stage the file on the server first ` +
+          `(e.g. via scp to ${process.env.GWS_MCP_STAGING_DIR || "/tmp/gws-mcp-staging"}/), ` +
+          `or (2) use base64Content instead.`,
+      );
+    }
+  }
+
   // Auto-detect mimeType from extension if not provided
   let mimeType = data.mimeType;
   if (!mimeType) {
@@ -1066,6 +1080,18 @@ export async function handleUploadFile(
     fileId: file.data.id,
     name: file.data.name,
   });
+
+  // Auto-cleanup staged files after successful upload
+  if (data.sourcePath && data.cleanupSource) {
+    try {
+      const fs = await import("fs/promises");
+      await fs.unlink(data.sourcePath);
+      log("Cleaned up staged source file", { path: data.sourcePath });
+    } catch {
+      log("Warning: failed to clean up staged source file", { path: data.sourcePath });
+    }
+  }
+
   return structuredResponse(
     `Uploaded file: ${file.data.name}\n` +
       `ID: ${file.data.id}\n` +

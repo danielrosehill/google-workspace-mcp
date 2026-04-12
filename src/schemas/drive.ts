@@ -146,6 +146,7 @@ export const UploadFileSchema = z
     mimeType: z.string().optional(),
     folderId: z.string().optional(),
     folderPath: z.string().optional(),
+    cleanupSource: z.boolean().optional(),
   })
   .refine((data) => !(data.folderId && data.folderPath), {
     message: "Provide either folderId or folderPath, not both",

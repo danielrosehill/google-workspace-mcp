@@ -104,6 +104,61 @@ npx @dguido/google-workspace-mcp auth
 4. Re-authenticate to grant all required scopes
 5. Verify the consent screen shows ALL scopes including full Drive access
 
+## File Upload from Remote Clients
+
+### "File not found at sourcePath" when uploading
+
+When the MCP server runs on a **different machine** than the client (e.g., server on a VM, client on a workstation), the `sourcePath` parameter refers to the **server's local filesystem**, not the client's. A path like `/home/user/file.pdf` on the client doesn't exist on the server.
+
+**Solutions (in order of preference):**
+
+#### Option 1: Use the MCP File Staging Service (recommended)
+
+Deploy [mcp-file-staging-service](https://github.com/danielrosehill/mcp-file-staging-service) alongside this MCP server. It provides a standard HTTP multipart upload endpoint that any client (CLI, browser, phone) can use:
+
+```bash
+# Stage the file from any HTTP client
+curl -F "file=@report.pdf" http://server:3201/upload
+# Returns: {"stagingPath": "/staging/a1b2c3d4.pdf", ...}
+```
+
+Then call `upload_file` with the returned path:
+```json
+{
+  "name": "report.pdf",
+  "sourcePath": "/staging/a1b2c3d4.pdf",
+  "folderId": "...",
+  "cleanupSource": true
+}
+```
+
+`cleanupSource: true` auto-deletes the staged file after successful upload to Drive.
+
+See the [staging service README](https://github.com/danielrosehill/mcp-file-staging-service) for Docker deployment and configuration.
+
+#### Option 2: Stage via SCP
+
+If SSH access is available, SCP files directly to the server's staging directory:
+
+```bash
+scp /local/path/file.pdf server:/tmp/gws-mcp-staging/file.pdf
+```
+
+Then use `sourcePath` + `cleanupSource: true` as above.
+
+#### Option 3: Use base64Content
+
+For smaller files (under ~5MB), encode as base64 and pass directly:
+```json
+{
+  "name": "file.pdf",
+  "base64Content": "JVBERi0xLjcK...",
+  "folderId": "..."
+}
+```
+
+Works across any network topology but increases payload size by ~33%.
+
 ## API Issues
 
 ### "API not enabled" errors

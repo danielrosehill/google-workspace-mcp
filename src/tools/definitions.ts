@@ -632,15 +632,26 @@ export const driveTools: ToolDefinition[] = [
   },
   {
     name: "upload_file",
-    description: "Upload file from disk or base64",
+    description:
+      "Upload file to Google Drive from a local path or base64 content. " +
+      "When the MCP server runs on a different machine than the client, " +
+      "sourcePath refers to the SERVER's filesystem — stage files there first " +
+      "(e.g. via scp) or use base64Content. Set cleanupSource: true to auto-delete " +
+      "the staged file after successful upload.",
     inputSchema: {
       type: "object",
       properties: {
         name: { type: "string", description: "File name with extension" },
-        sourcePath: { type: "string", description: "Path to source file" },
+        sourcePath: {
+          type: "string",
+          description:
+            "Path to source file on the MCP server's local filesystem. " +
+            "For remote deployments, stage the file on the server first " +
+            "(e.g. scp file.pdf server:/tmp/gws-mcp-staging/) then reference that path.",
+        },
         base64Content: {
           type: "string",
-          description: "Base64-encoded content",
+          description: "Base64-encoded file content (alternative to sourcePath, works across machines)",
         },
         mimeType: {
           type: "string",
@@ -654,6 +665,12 @@ export const driveTools: ToolDefinition[] = [
           type: "string",
           description:
             "Destination folder path like '/Documents/Uploads' (creates folders if needed, mutually exclusive with folderId)",
+        },
+        cleanupSource: {
+          type: "boolean",
+          description:
+            "If true, delete the sourcePath file after successful upload. " +
+            "Useful for cleaning up staged/temporary files in remote deployment workflows.",
         },
       },
       required: ["name"],
