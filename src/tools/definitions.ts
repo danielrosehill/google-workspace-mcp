@@ -2909,7 +2909,10 @@ export const gmailTools: ToolDefinition[] = [
       "Send an email. For RTL-language content (Hebrew, Arabic, Farsi, Urdu), set rtl: true " +
       "so the body renders right-aligned across all mail clients. Plain-text bodies do not " +
       "carry directionality, so relying on auto-detection is unreliable — always pass rtl: true " +
-      "for RTL content, optionally alongside a custom html body.",
+      "for RTL content, optionally alongside a custom html body. " +
+      "If the user refers to a recipient by name only (no email address), resolve the address " +
+      "via search_contacts before calling this tool. Ask the user to disambiguate on multiple " +
+      "matches; ask for the address on no matches. Never guess or fabricate an email address.",
     inputSchema: {
       type: "object",
       properties: {
@@ -2973,7 +2976,9 @@ export const gmailTools: ToolDefinition[] = [
     description:
       "Create or update a draft email. Omit draftId to create new; provide draftId to update " +
       "an existing draft. For RTL-language content (Hebrew, Arabic, Farsi, Urdu), set rtl: true " +
-      "so the body renders right-aligned.",
+      "so the body renders right-aligned. " +
+      "If the user names a recipient without an email address, resolve it via search_contacts " +
+      "first; ask to disambiguate on multiple matches and never invent addresses.",
     inputSchema: {
       type: "object",
       properties: {

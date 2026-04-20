@@ -277,7 +277,12 @@ function createMcpServer(defaultWorkspace?: string): Server {
         "When sending or drafting email in an RTL language (Hebrew, Arabic, Farsi, Urdu), " +
         "always pass rtl: true to send_email / draft_email so the body is wrapped in an " +
         "HTML dir=\"rtl\" container and renders right-aligned across all mail clients. Do not " +
-        "rely on client auto-detection for plain-text bodies.",
+        "rely on client auto-detection for plain-text bodies. " +
+        "Recipient resolution: if the user refers to a recipient by name or nickname without " +
+        "giving an email address (e.g. \"send this to Alice\", \"email mum\"), call " +
+        "search_contacts first to resolve the address before calling send_email or draft_email. " +
+        "If search returns multiple plausible matches, ask the user to disambiguate; if it " +
+        "returns none, ask for the address. Do not invent or guess email addresses.",
       capabilities: {
         resources: {},
         tools: {
