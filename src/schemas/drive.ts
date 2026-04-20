@@ -143,6 +143,7 @@ export const UploadFileSchema = z
     name: z.string().min(1, "File name is required"),
     sourcePath: z.string().optional(),
     base64Content: z.string().optional(),
+    sourceUrl: z.string().url().optional(),
     mimeType: z.string().optional(),
     folderId: z.string().optional(),
     folderPath: z.string().optional(),

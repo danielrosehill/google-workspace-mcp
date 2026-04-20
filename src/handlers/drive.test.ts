@@ -884,10 +884,12 @@ describe("handleUploadFile", () => {
     expect(structured.webViewLink).toBe("https://...");
   });
 
-  it("returns error when neither sourcePath nor base64Content provided", async () => {
+  it("returns error when no source input is provided", async () => {
     const result = await handleUploadFile(mockDrive, { name: "image.png" });
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain("sourcePath or base64Content is required");
+    expect(result.content[0].text).toContain(
+      "One of sourcePath, base64Content, or sourceUrl is required",
+    );
   });
 
   it("returns error when file already exists", async () => {

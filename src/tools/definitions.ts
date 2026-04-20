@@ -633,11 +633,10 @@ export const driveTools: ToolDefinition[] = [
   {
     name: "upload_file",
     description:
-      "Upload file to Google Drive from a local path or base64 content. " +
-      "When the MCP server runs on a different machine than the client, " +
-      "sourcePath refers to the SERVER's filesystem — stage files there first " +
-      "(e.g. via scp) or use base64Content. Set cleanupSource: true to auto-delete " +
-      "the staged file after successful upload.",
+      "Upload a file to Google Drive. Provide exactly one of sourcePath (server-local file), " +
+      "base64Content (inline, cross-machine), or sourceUrl (the server fetches the URL — " +
+      "ideal for presigned S3 URLs from remote clients). Set cleanupSource: true to " +
+      "auto-delete a sourcePath file after successful upload.",
     inputSchema: {
       type: "object",
       properties: {
@@ -645,13 +644,17 @@ export const driveTools: ToolDefinition[] = [
         sourcePath: {
           type: "string",
           description:
-            "Path to source file on the MCP server's local filesystem. " +
-            "For remote deployments, stage the file on the server first " +
-            "(e.g. scp file.pdf server:/tmp/gws-mcp-staging/) then reference that path.",
+            "Path to source file on the MCP server's local filesystem (server-local only).",
         },
         base64Content: {
           type: "string",
-          description: "Base64-encoded file content (alternative to sourcePath, works across machines)",
+          description: "Base64-encoded file content (works across machines; best for small files)",
+        },
+        sourceUrl: {
+          type: "string",
+          description:
+            "HTTP(S) URL the server will fetch and upload. Preferred for remote clients — " +
+            "e.g. a presigned S3 GET URL against the mcp-staging bucket.",
         },
         mimeType: {
           type: "string",
@@ -2937,13 +2940,17 @@ export const gmailTools: ToolDefinition[] = [
         replyTo: { type: "string", description: "Reply-to address" },
         attachments: {
           type: "array",
-          description: "File attachments. Provide either content (base64) or filePath (server reads the file).",
+          description:
+            "File attachments. Provide either content (base64) or filePath (server reads the file).",
           items: {
             type: "object",
             properties: {
               filename: { type: "string" },
               content: { type: "string", description: "Base64-encoded content" },
-              filePath: { type: "string", description: "Absolute file path on the server (auto-encoded)" },
+              filePath: {
+                type: "string",
+                description: "Absolute file path on the server (auto-encoded)",
+              },
               mimeType: { type: "string" },
             },
             required: ["filename"],
@@ -2955,7 +2962,7 @@ export const gmailTools: ToolDefinition[] = [
           type: "boolean",
           description:
             "Set true for Hebrew, Arabic, Farsi, Urdu, or any RTL-language body. Server wraps " +
-            "the HTML in <div dir=\"rtl\" style=\"text-align: right;\">. If no html is supplied, " +
+            'the HTML in <div dir="rtl" style="text-align: right;">. If no html is supplied, ' +
             "one is synthesised from the plain-text body. Strongly preferred over relying on " +
             "client auto-detection.",
         },
@@ -3028,7 +3035,7 @@ export const gmailTools: ToolDefinition[] = [
     description:
       "Forward an existing email to new recipients. Re-packages the original body and " +
       "(optionally) re-attaches all original attachments server-side — the agent does not need " +
-      "to download and re-upload them. Adds \"Fwd: \" prefix to the subject if not present. " +
+      'to download and re-upload them. Adds "Fwd: " prefix to the subject if not present. ' +
       "If the user names a recipient without an email address, resolve it via search_contacts " +
       "before calling this tool.",
     inputSchema: {
@@ -3056,7 +3063,7 @@ export const gmailTools: ToolDefinition[] = [
         },
         rtl: {
           type: "boolean",
-          description: "Wrap in dir=\"rtl\" for RTL-language content. See send_email.",
+          description: 'Wrap in dir="rtl" for RTL-language content. See send_email.',
         },
       },
       required: ["id", "to"],
@@ -3160,7 +3167,8 @@ export const gmailTools: ToolDefinition[] = [
                     domain: { type: "string" },
                     type: {
                       type: "string",
-                      description: "pixel_1x1 | hidden_css | known_tracker_domain | suspicious_path",
+                      description:
+                        "pixel_1x1 | hidden_css | known_tracker_domain | suspicious_path",
                     },
                     reasons: { type: "array", items: { type: "string" } },
                   },
@@ -4054,8 +4062,7 @@ import {
 const WORKSPACE_PROPERTY = {
   type: "string",
   description:
-    "Workspace name (e.g. 'personal', 'business'). " +
-    "Must match an entry in workspaces.json.",
+    "Workspace name (e.g. 'personal', 'business'). " + "Must match an entry in workspaces.json.",
 };
 
 function withWorkspace(tools: ToolDefinition[]): ToolDefinition[] {

@@ -1013,9 +1013,13 @@ export async function handleUploadFile(
   if (!validation.success) return validation.response;
   const data = validation.data;
 
-  // Require either sourcePath or base64Content
-  if (!data.sourcePath && !data.base64Content) {
-    return errorResponse("Either sourcePath or base64Content is required");
+  // Require exactly one input source
+  const sources = [data.sourcePath, data.base64Content, data.sourceUrl].filter(Boolean);
+  if (sources.length === 0) {
+    return errorResponse("One of sourcePath, base64Content, or sourceUrl is required");
+  }
+  if (sources.length > 1) {
+    return errorResponse("Provide only one of sourcePath, base64Content, or sourceUrl");
   }
 
   // Validate sourcePath exists before attempting upload
@@ -1025,18 +1029,29 @@ export async function handleUploadFile(
       return errorResponse(
         `File not found at sourcePath: ${data.sourcePath}. ` +
           `Note: sourcePath must be a path on the MCP server's local filesystem. ` +
-          `For remote clients, either: (1) stage the file on the server first ` +
-          `(e.g. via scp to ${process.env.GWS_MCP_STAGING_DIR || "/tmp/gws-mcp-staging"}/), ` +
-          `or (2) use base64Content instead.`,
+          `For remote clients, prefer sourceUrl (e.g. a presigned S3 GET URL) ` +
+          `or base64Content instead.`,
       );
     }
   }
 
-  // Auto-detect mimeType from extension if not provided
+  // Fetch sourceUrl into a buffer if provided
+  let fetchedBuffer: Buffer | undefined;
+  let fetchedContentType: string | undefined;
+  if (data.sourceUrl) {
+    const resp = await fetch(data.sourceUrl);
+    if (!resp.ok) {
+      return errorResponse(`Failed to fetch sourceUrl (HTTP ${resp.status}): ${data.sourceUrl}`);
+    }
+    fetchedBuffer = Buffer.from(await resp.arrayBuffer());
+    fetchedContentType = resp.headers.get("content-type")?.split(";")[0]?.trim() || undefined;
+  }
+
+  // Resolve mimeType: explicit > fetched Content-Type > extension > octet-stream
   let mimeType = data.mimeType;
   if (!mimeType) {
     const ext = data.name.split(".").pop()?.toLowerCase() || "";
-    mimeType = COMMON_MIME_TYPES[ext] || "application/octet-stream";
+    mimeType = fetchedContentType || COMMON_MIME_TYPES[ext] || "application/octet-stream";
   }
 
   // Resolve folder ID (supports both folderId and folderPath)
@@ -1058,7 +1073,7 @@ export async function handleUploadFile(
     mediaBody = fs.createReadStream(data.sourcePath);
   } else {
     const { Readable } = await import("stream");
-    const buffer = Buffer.from(data.base64Content!, "base64");
+    const buffer = fetchedBuffer ?? Buffer.from(data.base64Content!, "base64");
     mediaBody = Readable.from(buffer);
   }
 
