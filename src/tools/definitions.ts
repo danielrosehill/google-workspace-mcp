@@ -2905,7 +2905,11 @@ export const gmailTools: ToolDefinition[] = [
   // Core Email Operations
   {
     name: "send_email",
-    description: "Send an email",
+    description:
+      "Send an email. For RTL-language content (Hebrew, Arabic, Farsi, Urdu), set rtl: true " +
+      "so the body renders right-aligned across all mail clients. Plain-text bodies do not " +
+      "carry directionality, so relying on auto-detection is unreliable — always pass rtl: true " +
+      "for RTL content, optionally alongside a custom html body.",
     inputSchema: {
       type: "object",
       properties: {
@@ -2944,6 +2948,14 @@ export const gmailTools: ToolDefinition[] = [
         },
         threadId: { type: "string", description: "Thread ID to reply to" },
         inReplyTo: { type: "string", description: "Message-ID for threading" },
+        rtl: {
+          type: "boolean",
+          description:
+            "Set true for Hebrew, Arabic, Farsi, Urdu, or any RTL-language body. Server wraps " +
+            "the HTML in <div dir=\"rtl\" style=\"text-align: right;\">. If no html is supplied, " +
+            "one is synthesised from the plain-text body. Strongly preferred over relying on " +
+            "client auto-detection.",
+        },
       },
       required: ["to", "subject", "body"],
     },
@@ -2959,8 +2971,9 @@ export const gmailTools: ToolDefinition[] = [
   {
     name: "draft_email",
     description:
-      "Create or update a draft email. Omit draftId to create new;" +
-      " provide draftId to update an existing draft.",
+      "Create or update a draft email. Omit draftId to create new; provide draftId to update " +
+      "an existing draft. For RTL-language content (Hebrew, Arabic, Farsi, Urdu), set rtl: true " +
+      "so the body renders right-aligned.",
     inputSchema: {
       type: "object",
       properties: {
@@ -2989,6 +3002,11 @@ export const gmailTools: ToolDefinition[] = [
         replyTo: { type: "string" },
         attachments: { type: "array" },
         threadId: { type: "string" },
+        rtl: {
+          type: "boolean",
+          description:
+            "Set true for RTL-language drafts (Hebrew, Arabic, Farsi, Urdu). See send_email.",
+        },
       },
     },
     outputSchema: {

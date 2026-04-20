@@ -33,6 +33,20 @@ import {
 import * as fs from "fs/promises";
 import * as path from "path";
 
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function applyRtlWrapping(body: string, html: string | undefined): string {
+  const inner = html ?? escapeHtml(body).replace(/\r?\n/g, "<br>");
+  return `<div dir="rtl" style="text-align: right;">${inner}</div>`;
+}
+
 // System labels that cannot be deleted
 const SYSTEM_LABELS = new Set([
   "INBOX",
@@ -163,14 +177,16 @@ function extractAttachments(
 export async function handleSendEmail(gmail: gmail_v1.Gmail, args: unknown): Promise<ToolResponse> {
   const validation = validateArgs(SendEmailSchema, args);
   if (!validation.success) return validation.response;
-  const { to, subject, body, html, cc, bcc, replyTo, from, attachments, threadId, inReplyTo } =
+  const { to, subject, body, html, cc, bcc, replyTo, from, attachments, threadId, inReplyTo, rtl } =
     validation.data;
+
+  const effectiveHtml = rtl ? applyRtlWrapping(body, html) : html;
 
   const raw = buildMimeMessage({
     to,
     subject,
     body,
-    html,
+    html: effectiveHtml,
     cc,
     bcc,
     replyTo,
@@ -205,14 +221,16 @@ export async function handleDraftEmail(
 ): Promise<ToolResponse> {
   const validation = validateArgs(DraftEmailSchema, args);
   if (!validation.success) return validation.response;
-  const { draftId, to, subject, body, html, cc, bcc, replyTo, attachments, threadId } =
+  const { draftId, to, subject, body, html, cc, bcc, replyTo, attachments, threadId, rtl } =
     validation.data;
+
+  const effectiveHtml = rtl ? applyRtlWrapping(body || "", html) : html;
 
   const raw = buildMimeMessage({
     to: to || [],
     subject: subject || "",
     body: body || "",
-    html,
+    html: effectiveHtml,
     cc,
     bcc,
     replyTo,

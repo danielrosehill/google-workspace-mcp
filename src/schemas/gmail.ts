@@ -132,6 +132,16 @@ export const SendEmailSchema = z.object({
   attachments: z.array(AttachmentSchema).optional().describe("File attachments"),
   threadId: z.string().optional().describe("Thread ID to reply to"),
   inReplyTo: z.string().optional().describe("Message-ID header for threading"),
+  rtl: z
+    .boolean()
+    .optional()
+    .describe(
+      "Enforce right-to-left rendering for the email body. Use for Hebrew, Arabic, Farsi, " +
+        "Urdu, or any RTL-language email. When true, the server wraps the HTML body in " +
+        "<div dir=\"rtl\" style=\"text-align: right;\">...</div>. If html is omitted, one is " +
+        "generated from body (newlines -> <br>) and wrapped. Always prefer this over relying on " +
+        "client auto-detection — it renders reliably across Gmail, Outlook, and mobile clients.",
+    ),
 });
 
 export type SendEmailInput = z.infer<typeof SendEmailSchema>;
@@ -148,6 +158,13 @@ export const DraftEmailSchema = z.object({
   replyTo: z.string().email().optional().describe("Reply-to address"),
   attachments: z.array(AttachmentSchema).optional().describe("File attachments"),
   threadId: z.string().optional().describe("Thread ID for draft replies"),
+  rtl: z
+    .boolean()
+    .optional()
+    .describe(
+      "Enforce right-to-left rendering (Hebrew, Arabic, Farsi, Urdu). Wraps HTML body in " +
+        "<div dir=\"rtl\" style=\"text-align: right;\">. See send_email for full details.",
+    ),
 });
 
 export type DraftEmailInput = z.infer<typeof DraftEmailSchema>;

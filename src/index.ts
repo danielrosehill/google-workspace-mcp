@@ -273,7 +273,11 @@ function createMcpServer(defaultWorkspace?: string): Server {
     },
     {
       instructions:
-        "On any tool error, call get_status for diagnostics " + "before asking the user to debug.",
+        "On any tool error, call get_status for diagnostics before asking the user to debug. " +
+        "When sending or drafting email in an RTL language (Hebrew, Arabic, Farsi, Urdu), " +
+        "always pass rtl: true to send_email / draft_email so the body is wrapped in an " +
+        "HTML dir=\"rtl\" container and renders right-aligned across all mail clients. Do not " +
+        "rely on client auto-detection for plain-text bodies.",
       capabilities: {
         resources: {},
         tools: {
