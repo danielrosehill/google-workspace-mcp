@@ -3024,6 +3024,92 @@ export const gmailTools: ToolDefinition[] = [
     },
   },
   {
+    name: "forward_email",
+    description:
+      "Forward an existing email to new recipients. Re-packages the original body and " +
+      "(optionally) re-attaches all original attachments server-side — the agent does not need " +
+      "to download and re-upload them. Adds \"Fwd: \" prefix to the subject if not present. " +
+      "If the user names a recipient without an email address, resolve it via search_contacts " +
+      "before calling this tool.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Message ID of the email to forward" },
+        to: {
+          type: "array",
+          items: { type: "string" },
+          description: 'Recipients, e.g. ["user@example.com"]',
+        },
+        cc: { type: "array", items: { type: "string" }, description: "CC recipients" },
+        bcc: { type: "array", items: { type: "string" }, description: "BCC recipients" },
+        additionalBody: {
+          type: "string",
+          description: "Optional note prepended above the forwarded content",
+        },
+        subjectPrefix: {
+          type: "string",
+          description: "Subject prefix (default: 'Fwd: ')",
+        },
+        includeAttachments: {
+          type: "boolean",
+          description: "Re-attach the original attachments (default: true)",
+        },
+        rtl: {
+          type: "boolean",
+          description: "Wrap in dir=\"rtl\" for RTL-language content. See send_email.",
+        },
+      },
+      required: ["id", "to"],
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Message ID of the sent forward" },
+        threadId: { type: "string" },
+        labelIds: { type: "array", items: { type: "string" } },
+        forwardedFromId: { type: "string", description: "Original message ID" },
+        attachmentsReattached: { type: "number" },
+      },
+    },
+  },
+  {
+    name: "unsubscribe_email",
+    description:
+      "Unsubscribe from a mailing list using the email's standard unsubscribe mechanisms. " +
+      "Prefers RFC 8058 one-click HTTP POST when available; falls back to mailto: unsubscribe; " +
+      "otherwise returns a URL from the List-Unsubscribe header or body for the user to click. " +
+      "Note: acting on unsubscribe confirms your address is live to the sender — use only for " +
+      "legitimate senders, not suspected spam.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Message ID of the email to unsubscribe from" },
+        dryRun: {
+          type: "boolean",
+          description: "Report the action that would be taken without performing it",
+        },
+      },
+      required: ["id"],
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        action: {
+          type: "string",
+          description: "one_click_post | mailto | manual | none_found",
+        },
+        url: { type: "string" },
+        to: { type: "string" },
+        subject: { type: "string" },
+        status: { type: "number" },
+        success: { type: "boolean" },
+        sentMessageId: { type: "string" },
+        dryRun: { type: "boolean" },
+        source: { type: "string" },
+      },
+    },
+  },
+  {
     name: "read_email",
     readOnly: true,
     description: "Read email content and metadata",

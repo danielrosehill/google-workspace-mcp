@@ -169,6 +169,45 @@ export const DraftEmailSchema = z.object({
 
 export type DraftEmailInput = z.infer<typeof DraftEmailSchema>;
 
+export const ForwardEmailSchema = z.object({
+  workspace: WorkspaceField,
+  id: z.string().min(1).describe("Message ID of the email to forward (from search_emails)"),
+  to: z.array(z.string().email()).min(1, "At least one recipient required"),
+  cc: z.array(z.string().email()).optional(),
+  bcc: z.array(z.string().email()).optional(),
+  additionalBody: z
+    .string()
+    .optional()
+    .describe("Optional note prepended above the forwarded content"),
+  subjectPrefix: z
+    .string()
+    .optional()
+    .default("Fwd: ")
+    .describe("Prefix added to the forwarded subject if not already present"),
+  includeAttachments: z
+    .boolean()
+    .optional()
+    .default(true)
+    .describe("Re-attach the original message's attachments (default: true)"),
+  rtl: z
+    .boolean()
+    .optional()
+    .describe("Wrap forwarded body in dir=\"rtl\" for Hebrew/Arabic/Farsi/Urdu content."),
+});
+
+export type ForwardEmailInput = z.infer<typeof ForwardEmailSchema>;
+
+export const UnsubscribeEmailSchema = z.object({
+  workspace: WorkspaceField,
+  id: z.string().min(1).describe("Message ID of the email to unsubscribe from"),
+  dryRun: z
+    .boolean()
+    .optional()
+    .describe("If true, report what action would be taken without performing it"),
+});
+
+export type UnsubscribeEmailInput = z.infer<typeof UnsubscribeEmailSchema>;
+
 export const DeleteDraftSchema = z.object({
   workspace: WorkspaceField,
   id: z

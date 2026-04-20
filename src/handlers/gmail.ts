@@ -14,6 +14,8 @@ import type { ToolResponse } from "../utils/index.js";
 import {
   SendEmailSchema,
   DraftEmailSchema,
+  ForwardEmailSchema,
+  UnsubscribeEmailSchema,
   DeleteDraftSchema,
   ListDraftsSchema,
   ReadEmailSchema,
@@ -260,6 +262,253 @@ export async function handleDraftEmail(
       id: response.data.message?.id,
       threadId: response.data.message?.threadId,
     },
+  );
+}
+
+async function fetchAttachmentsAsBase64(
+  gmail: gmail_v1.Gmail,
+  messageId: string,
+  attachments: Array<{ id: string; filename: string; mimeType: string }>,
+): Promise<Array<{ filename: string; mimeType: string; content: string }>> {
+  const results: Array<{ filename: string; mimeType: string; content: string }> = [];
+  for (const att of attachments) {
+    const res = await gmail.users.messages.attachments.get({
+      userId: "me",
+      messageId,
+      id: att.id,
+    });
+    const data = res.data.data;
+    if (!data) continue;
+    // Gmail returns base64url; re-encode to standard base64 for MIME
+    const base64 = Buffer.from(
+      data.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (data.length % 4)) % 4),
+      "base64",
+    ).toString("base64");
+    results.push({ filename: att.filename, mimeType: att.mimeType, content: base64 });
+  }
+  return results;
+}
+
+export async function handleForwardEmail(
+  gmail: gmail_v1.Gmail,
+  args: unknown,
+): Promise<ToolResponse> {
+  const validation = validateArgs(ForwardEmailSchema, args);
+  if (!validation.success) return validation.response;
+  const { id, to, cc, bcc, additionalBody, subjectPrefix, includeAttachments, rtl } =
+    validation.data;
+
+  const original = await gmail.users.messages.get({ userId: "me", id, format: "full" });
+  const headers = parseEmailHeaders(original.data.payload?.headers || []);
+  const origBody = extractEmailBody(original.data.payload);
+  const origAttachments = extractAttachments(original.data.payload);
+
+  const origSubject = headers.subject || "(No subject)";
+  const prefix = subjectPrefix ?? "Fwd: ";
+  const subject = origSubject.toLowerCase().startsWith(prefix.trim().toLowerCase())
+    ? origSubject
+    : `${prefix}${origSubject}`;
+
+  const forwardedHeader =
+    `---------- Forwarded message ----------\n` +
+    `From: ${headers.from || "Unknown"}\n` +
+    `Date: ${headers.date || "Unknown"}\n` +
+    `Subject: ${origSubject}\n` +
+    `To: ${headers.to || "Unknown"}\n` +
+    (headers.cc ? `Cc: ${headers.cc}\n` : "") +
+    `\n`;
+
+  const note = additionalBody ? `${additionalBody}\n\n` : "";
+  const plainBody = `${note}${forwardedHeader}${origBody.text || "(no plain-text body)"}`;
+
+  let html: string | undefined;
+  if (origBody.html) {
+    const noteHtml = additionalBody
+      ? `<p>${additionalBody.replace(/\n/g, "<br>")}</p>`
+      : "";
+    const headerHtml =
+      `<div style="border-left:2px solid #ccc;padding-left:1em;margin:1em 0;">` +
+      `<p><b>---------- Forwarded message ----------</b><br>` +
+      `<b>From:</b> ${headers.from || "Unknown"}<br>` +
+      `<b>Date:</b> ${headers.date || "Unknown"}<br>` +
+      `<b>Subject:</b> ${origSubject}<br>` +
+      `<b>To:</b> ${headers.to || "Unknown"}` +
+      (headers.cc ? `<br><b>Cc:</b> ${headers.cc}` : "") +
+      `</p>${origBody.html}</div>`;
+    html = `${noteHtml}${headerHtml}`;
+  }
+
+  const effectiveHtml = rtl ? applyRtlWrapping(plainBody, html) : html;
+
+  const reattached = includeAttachments
+    ? await fetchAttachmentsAsBase64(gmail, id, origAttachments)
+    : [];
+
+  const raw = buildMimeMessage({
+    to,
+    subject,
+    body: plainBody,
+    html: effectiveHtml,
+    cc,
+    bcc,
+    attachments: reattached,
+  });
+
+  const response = await gmail.users.messages.send({
+    userId: "me",
+    requestBody: { raw },
+  });
+
+  log("Forwarded email", {
+    originalId: id,
+    newId: response.data.id,
+    attachments: reattached.length,
+  });
+
+  return structuredResponse(
+    `Email forwarded successfully.\nNew message ID: ${response.data.id}\nAttachments re-attached: ${reattached.length}`,
+    {
+      id: response.data.id,
+      threadId: response.data.threadId,
+      labelIds: response.data.labelIds,
+      forwardedFromId: id,
+      attachmentsReattached: reattached.length,
+    },
+  );
+}
+
+function parseListUnsubscribe(headerValue: string): { urls: string[]; mailtos: string[] } {
+  const urls: string[] = [];
+  const mailtos: string[] = [];
+  const matches = headerValue.match(/<([^>]+)>/g) || [];
+  for (const m of matches) {
+    const v = m.slice(1, -1).trim();
+    if (v.toLowerCase().startsWith("mailto:")) mailtos.push(v.slice(7));
+    else if (/^https?:\/\//i.test(v)) urls.push(v);
+  }
+  return { urls, mailtos };
+}
+
+function findUnsubscribeLinkInHtml(html: string): string | null {
+  if (!html) return null;
+  const linkRegex = /<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = linkRegex.exec(html)) !== null) {
+    const href = match[1];
+    const text = match[2].replace(/<[^>]+>/g, "").trim();
+    if (/unsubscribe/i.test(text) || /unsubscribe/i.test(href)) {
+      if (/^https?:\/\//i.test(href)) return href;
+    }
+  }
+  return null;
+}
+
+function parseMailtoUrl(raw: string): { to: string; subject?: string; body?: string } {
+  const [addr, query] = raw.split("?", 2);
+  const params = new URLSearchParams(query || "");
+  return {
+    to: addr,
+    subject: params.get("subject") || undefined,
+    body: params.get("body") || undefined,
+  };
+}
+
+export async function handleUnsubscribeEmail(
+  gmail: gmail_v1.Gmail,
+  args: unknown,
+): Promise<ToolResponse> {
+  const validation = validateArgs(UnsubscribeEmailSchema, args);
+  if (!validation.success) return validation.response;
+  const { id, dryRun } = validation.data;
+
+  const msg = await gmail.users.messages.get({ userId: "me", id, format: "full" });
+  const headers = parseEmailHeaders(msg.data.payload?.headers || []);
+  const listUnsub = headers["list-unsubscribe"];
+  const listUnsubPost = headers["list-unsubscribe-post"];
+  const oneClick =
+    !!listUnsubPost && /List-Unsubscribe\s*=\s*One-Click/i.test(listUnsubPost);
+
+  const parsed = listUnsub ? parseListUnsubscribe(listUnsub) : { urls: [], mailtos: [] };
+
+  // 1) One-click HTTP POST (RFC 8058)
+  if (oneClick && parsed.urls.length > 0) {
+    const url = parsed.urls[0];
+    if (dryRun) {
+      return structuredResponse(
+        `Dry run: would POST to one-click unsubscribe URL ${url}`,
+        { action: "one_click_post", url, dryRun: true },
+      );
+    }
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: "List-Unsubscribe=One-Click",
+      });
+      const ok = res.ok;
+      log("One-click unsubscribe", { url, status: res.status });
+      return structuredResponse(
+        ok
+          ? `Unsubscribed via one-click HTTP POST (status ${res.status}).\nURL: ${url}`
+          : `One-click POST returned status ${res.status}. URL: ${url}`,
+        { action: "one_click_post", url, status: res.status, success: ok },
+      );
+    } catch (err) {
+      return errorResponse(
+        `One-click unsubscribe POST failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  // 2) mailto: unsubscribe
+  if (parsed.mailtos.length > 0) {
+    const mailto = parseMailtoUrl(parsed.mailtos[0]);
+    if (dryRun) {
+      return structuredResponse(
+        `Dry run: would send unsubscribe email to ${mailto.to}` +
+          (mailto.subject ? ` with subject "${mailto.subject}"` : ""),
+        { action: "mailto", to: mailto.to, subject: mailto.subject, dryRun: true },
+      );
+    }
+    const raw = buildMimeMessage({
+      to: [mailto.to],
+      subject: mailto.subject || "unsubscribe",
+      body: mailto.body || "unsubscribe",
+    });
+    const sent = await gmail.users.messages.send({ userId: "me", requestBody: { raw } });
+    log("Mailto unsubscribe", { to: mailto.to, sentId: sent.data.id });
+    return structuredResponse(
+      `Unsubscribe email sent to ${mailto.to}.\nMessage ID: ${sent.data.id}`,
+      {
+        action: "mailto",
+        to: mailto.to,
+        subject: mailto.subject || "unsubscribe",
+        sentMessageId: sent.data.id,
+      },
+    );
+  }
+
+  // 3) HTTPS URL in List-Unsubscribe but no one-click — return for manual action
+  if (parsed.urls.length > 0) {
+    return structuredResponse(
+      `This sender exposes an unsubscribe URL but not one-click. Open the link manually:\n${parsed.urls[0]}`,
+      { action: "manual", url: parsed.urls[0] },
+    );
+  }
+
+  // 4) Fallback: scan HTML body for an unsubscribe link
+  const body = extractEmailBody(msg.data.payload);
+  const htmlLink = findUnsubscribeLinkInHtml(body.html);
+  if (htmlLink) {
+    return structuredResponse(
+      `No List-Unsubscribe header found, but an unsubscribe link was detected in the body. Open manually:\n${htmlLink}`,
+      { action: "manual", url: htmlLink, source: "body_scan" },
+    );
+  }
+
+  return structuredResponse(
+    `No unsubscribe mechanism found in this email. Sender may not provide one, or message is not a mailing-list message.`,
+    { action: "none_found" },
   );
 }
 
