@@ -19,6 +19,7 @@ import {
   getEnvVarCredentials,
   isValidClientIdFormat,
 } from "../auth/utils.js";
+import { getWorkspace } from "../config/workspaces.js";
 import { validateOAuthConfig, GoogleAuthError, type AuthErrorCode } from "../errors/index.js";
 import { getLastTokenAuthError } from "../auth/tokenManager.js";
 import { GetStatusSchema } from "../schemas/status.js";
@@ -45,6 +46,15 @@ const SERVER_START_TIME = Date.now();
 /** Get server uptime in seconds */
 export function getUptimeSeconds(): number {
   return Math.floor((Date.now() - SERVER_START_TIME) / 1000);
+}
+
+async function fileExists(p: string): Promise<boolean> {
+  try {
+    await fs.access(p);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export type OverallStatus = "ok" | "warning" | "error";
@@ -74,6 +84,7 @@ export interface StatusData extends Record<string, unknown> {
   uptime_seconds: number;
   timestamp: string;
   profile: string | null;
+  workspace: { name: string; label?: string; tokenPath?: string; clientCredentials?: string } | null;
   auth: {
     configured: boolean;
     credential_source: "env_var" | "file" | "none";
@@ -110,7 +121,7 @@ async function credentialsAvailable(): Promise<boolean> {
 /**
  * Load and parse the token file to get status info.
  */
-async function getTokenInfo(): Promise<{
+async function getTokenInfo(explicitTokenPath?: string): Promise<{
   status: TokenStatus;
   expires_at: string | null;
   has_refresh: boolean;
@@ -118,7 +129,7 @@ async function getTokenInfo(): Promise<{
   has_access_token: boolean;
   is_expired: boolean;
 }> {
-  const tokenPath = getSecureTokenPath();
+  const tokenPath = explicitTokenPath ?? getSecureTokenPath();
 
   try {
     const content = await fs.readFile(tokenPath, "utf-8");
@@ -192,8 +203,10 @@ async function getTokenInfo(): Promise<{
  * Check if credentials are available and valid (for diagnostic mode).
  * Checks env vars first, then the credentials file.
  */
-async function checkCredentials(): Promise<ConfigCheck> {
-  // Check env var credentials first
+async function checkCredentials(explicitKeysPath?: string): Promise<ConfigCheck> {
+  // Env var credentials win even when an explicit per-workspace path is set,
+  // because the env var pair is the simplest setup and applies process-wide.
+  // Per-workspace files only matter when env vars are absent.
   const envCreds = getEnvVarCredentials();
   if (envCreds) {
     if (!isValidClientIdFormat(envCreds.client_id)) {
@@ -214,8 +227,18 @@ async function checkCredentials(): Promise<ConfigCheck> {
     };
   }
 
-  const keysPath = getKeysFilePath();
-  const exists = await credentialsFileExists();
+  const keysPath = explicitKeysPath ?? getKeysFilePath();
+  let exists: boolean;
+  if (explicitKeysPath) {
+    try {
+      await fs.access(explicitKeysPath);
+      exists = true;
+    } catch {
+      exists = false;
+    }
+  } else {
+    exists = await credentialsFileExists();
+  }
 
   if (!exists) {
     return {
@@ -274,8 +297,10 @@ async function checkCredentials(): Promise<ConfigCheck> {
 /**
  * Check token file status (for diagnostic mode).
  */
-async function checkTokenFile(): Promise<{ check: ConfigCheck; tokenInfo: TokenCheck | null }> {
-  const tokenPath = getSecureTokenPath();
+async function checkTokenFile(
+  explicitTokenPath?: string,
+): Promise<{ check: ConfigCheck; tokenInfo: TokenCheck | null }> {
+  const tokenPath = explicitTokenPath ?? getSecureTokenPath();
 
   try {
     await fs.access(tokenPath);
@@ -520,9 +545,29 @@ export async function handleGetStatus(
     return validation.response;
   }
 
+  // Resolve workspace-aware paths if a workspace was supplied.
+  // Falls back to the legacy global XDG paths when no workspace is given.
+  let workspaceTokenPath: string | undefined;
+  let workspaceKeysPath: string | undefined;
+  let workspaceLabel: string | undefined;
+  let workspaceResolveError: string | undefined;
+  const workspaceName = validation.data.workspace;
+  if (workspaceName) {
+    try {
+      const ws = await getWorkspace(workspaceName);
+      workspaceTokenPath = ws.tokenPath;
+      workspaceKeysPath = ws.clientCredentials;
+      workspaceLabel = ws.label;
+    } catch (error) {
+      workspaceResolveError = error instanceof Error ? error.message : String(error);
+    }
+  }
+
   // Basic status info
-  const configured = await credentialsAvailable();
-  const tokenInfo = await getTokenInfo();
+  const configured = workspaceKeysPath
+    ? await fileExists(workspaceKeysPath)
+    : await credentialsAvailable();
+  const tokenInfo = await getTokenInfo(workspaceTokenPath);
   const timestamp = new Date().toISOString();
   const uptime_seconds = getUptimeSeconds();
 
@@ -551,7 +596,16 @@ export async function handleGetStatus(
   // Run diagnostic checks
   const configChecks: ConfigCheck[] = [];
 
-  configChecks.push(await checkCredentials());
+  if (workspaceResolveError) {
+    configChecks.push({
+      name: "workspace",
+      status: "error",
+      message: `Could not resolve workspace "${workspaceName}": ${workspaceResolveError}`,
+      fix: ["Check workspaces.json and the GWS_WORKSPACES_CONFIG path"],
+    });
+  }
+
+  configChecks.push(await checkCredentials(workspaceKeysPath));
 
   const configValidation = await validateOAuthConfig();
   if (!configValidation.valid) {
@@ -572,7 +626,8 @@ export async function handleGetStatus(
     });
   }
 
-  const { check: tokenFileCheck, tokenInfo: tokenCheckData } = await checkTokenFile();
+  const { check: tokenFileCheck, tokenInfo: tokenCheckData } =
+    await checkTokenFile(workspaceTokenPath);
   configChecks.push(tokenFileCheck);
 
   const lastError = getLastTokenAuthError();
@@ -614,6 +669,14 @@ export async function handleGetStatus(
     uptime_seconds,
     timestamp,
     profile: activeProfile,
+    workspace: workspaceName
+      ? {
+          name: workspaceName,
+          label: workspaceLabel,
+          tokenPath: workspaceTokenPath,
+          clientCredentials: workspaceKeysPath,
+        }
+      : null,
     auth: {
       configured,
       credential_source: getEnvVarCredentials() ? "env_var" : configured ? "file" : "none",

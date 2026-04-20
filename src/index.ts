@@ -527,7 +527,17 @@ function createToolRegistry(): Record<string, ToolHandler> {
   // Discovery and status tools (always available, no auth required for status)
   Object.assign(registry, {
     list_tools: (_services, args) => handleListTools(args),
-    get_status: ({ drive }, args) => handleGetStatus(authClient, drive, VERSION, args),
+    get_status: ({ drive }, args) => {
+      // Mirror the dispatcher: ensure workspace is threaded through so
+      // per-workspace token/cred paths are checked.
+      const statusArgs: Record<string, unknown> = {
+        ...((args as Record<string, unknown>) ?? {}),
+      };
+      if (!statusArgs.workspace && defaultWorkspace) {
+        statusArgs.workspace = defaultWorkspace;
+      }
+      return handleGetStatus(authClient, drive, VERSION, statusArgs);
+    },
   } satisfies Record<string, ToolHandler>);
 
   // Drive tools
@@ -699,9 +709,16 @@ s.setRequestHandler(CallToolRequestSchema, async (request) => {
   const toolName = request.params.name;
   const args = request.params.arguments;
 
-  // Status/discovery tools work without auth
+  // Status/discovery tools work without auth.
+  // For get_status we still want workspace-aware diagnostics — inject the
+  // path-based default workspace so per-workspace token/credential paths
+  // are resolved instead of falling back to the global XDG defaults.
   if (toolName === "get_status") {
-    return handleGetStatus(authClient, drive, VERSION, args);
+    const statusArgs: Record<string, unknown> = { ...((args as Record<string, unknown>) ?? {}) };
+    if (!statusArgs.workspace && defaultWorkspace) {
+      statusArgs.workspace = defaultWorkspace;
+    }
+    return handleGetStatus(authClient, drive, VERSION, statusArgs);
   }
   if (toolName === "list_tools") {
     return handleListTools(args);
