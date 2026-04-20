@@ -3110,6 +3110,69 @@ export const gmailTools: ToolDefinition[] = [
     },
   },
   {
+    name: "scan_tracking_pixels",
+    readOnly: true,
+    description:
+      "Scan one or more emails for tracking pixels and marketing-analytics beacons. Detects " +
+      "1x1 or zero-dimension images, CSS-hidden images (display:none / visibility:hidden / " +
+      "opacity:0), images loaded from known tracker domains (Mailtrack, HubSpot, Mailchimp, " +
+      "SendGrid, Braze, Iterable, etc.), and URLs matching suspicious tracker paths " +
+      "(/open, /pixel, /beacon, /wf/open, /trk, etc.). Does NOT fetch any tracker — purely " +
+      "static HTML analysis. Accepts a single id or up to 50 ids for batch scanning.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: {
+          oneOf: [
+            { type: "string", description: "Single message ID" },
+            {
+              type: "array",
+              items: { type: "string" },
+              description: "Array of message IDs (max 50)",
+            },
+          ],
+          description: "Message ID or array of IDs to scan (max 50)",
+        },
+      },
+      required: ["id"],
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        totalMessages: { type: "number" },
+        totalTrackers: { type: "number" },
+        messagesWithTrackers: { type: "number" },
+        results: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              subject: { type: "string" },
+              from: { type: "string" },
+              trackerCount: { type: "number" },
+              trackers: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    url: { type: "string" },
+                    domain: { type: "string" },
+                    type: {
+                      type: "string",
+                      description: "pixel_1x1 | hidden_css | known_tracker_domain | suspicious_path",
+                    },
+                    reasons: { type: "array", items: { type: "string" } },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+  {
     name: "read_email",
     readOnly: true,
     description: "Read email content and metadata",

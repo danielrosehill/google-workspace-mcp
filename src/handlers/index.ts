@@ -88,6 +88,7 @@ export {
   handleDraftEmail,
   handleForwardEmail,
   handleUnsubscribeEmail,
+  handleScanTrackingPixels,
   handleDeleteDraft,
   handleListDrafts,
   handleReadEmail,

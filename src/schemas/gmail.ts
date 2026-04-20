@@ -208,6 +208,15 @@ export const UnsubscribeEmailSchema = z.object({
 
 export type UnsubscribeEmailInput = z.infer<typeof UnsubscribeEmailSchema>;
 
+export const ScanTrackingPixelsSchema = z.object({
+  workspace: WorkspaceField,
+  id: z
+    .union([z.string().min(1), z.array(z.string().min(1)).min(1).max(50)])
+    .describe("Message ID or array of IDs (max 50) to scan for tracking pixels"),
+});
+
+export type ScanTrackingPixelsInput = z.infer<typeof ScanTrackingPixelsSchema>;
+
 export const DeleteDraftSchema = z.object({
   workspace: WorkspaceField,
   id: z

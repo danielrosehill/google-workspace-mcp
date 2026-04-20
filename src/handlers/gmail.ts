@@ -16,6 +16,7 @@ import {
   DraftEmailSchema,
   ForwardEmailSchema,
   UnsubscribeEmailSchema,
+  ScanTrackingPixelsSchema,
   DeleteDraftSchema,
   ListDraftsSchema,
   ReadEmailSchema,
@@ -510,6 +511,209 @@ export async function handleUnsubscribeEmail(
     `No unsubscribe mechanism found in this email. Sender may not provide one, or message is not a mailing-list message.`,
     { action: "none_found" },
   );
+}
+
+const KNOWN_TRACKER_DOMAINS = [
+  "mailtrack.io",
+  "bananatag.com",
+  "yesware.com",
+  "mixpanel.com",
+  "customer.io",
+  "mandrillapp.com",
+  "list-manage.com",
+  "rsgsv.net",
+  "sendgrid.net",
+  "sparkpostmail.com",
+  "sparkpostmail1.com",
+  "mktoresp.com",
+  "marketo.com",
+  "eloqua.com",
+  "pardot.com",
+  "hubspotlinks.com",
+  "hs-scripts.com",
+  "hubspotemail.net",
+  "hubspot.com",
+  "braze.com",
+  "iterable.com",
+  "segment.io",
+  "mailgun.org",
+  "mailgun.net",
+  "postmarkapp.com",
+  "pstmrk.it",
+  "cmail19.com",
+  "cmail20.com",
+  "createsend.com",
+  "convertkit-mail.com",
+  "convertkit-mail2.com",
+  "substack.com",
+  "bf04.net",
+  "intercom-mail.com",
+  "intercom.io",
+];
+
+const SUSPICIOUS_TRACKER_PATHS = [
+  /\/open\b/i,
+  /\/open\.php/i,
+  /\/pixel\b/i,
+  /\/o\//,
+  /\/track\b/i,
+  /\/beacon/i,
+  /\/wf\/open/i,
+  /\/trk\//i,
+  /\/trkn\//i,
+  /\/open\.aspx/i,
+  /\/ss\/c\//i,
+  /\/ls\/click/i,
+  /\/e\/o\//i,
+  /\.gif\?/i,
+];
+
+interface DetectedTracker {
+  url: string;
+  domain: string;
+  type: "pixel_1x1" | "hidden_css" | "known_tracker_domain" | "suspicious_path";
+  reasons: string[];
+}
+
+function detectTrackingPixels(html: string): DetectedTracker[] {
+  if (!html) return [];
+  const found: DetectedTracker[] = [];
+  const seen = new Set<string>();
+  const imgRegex = /<img\b([^>]*)\/?>/gi;
+  let match: RegExpExecArray | null;
+
+  while ((match = imgRegex.exec(html)) !== null) {
+    const attrs = match[1];
+    const srcMatch = /\bsrc\s*=\s*["']([^"']+)["']/i.exec(attrs);
+    if (!srcMatch) continue;
+    const src = srcMatch[1].trim();
+    if (seen.has(src)) continue;
+    seen.add(src);
+
+    let domain = "";
+    try {
+      domain = new URL(src).hostname.toLowerCase();
+    } catch {
+      continue;
+    }
+
+    const widthAttr = /\bwidth\s*=\s*["']?(\d+)/i.exec(attrs)?.[1];
+    const heightAttr = /\bheight\s*=\s*["']?(\d+)/i.exec(attrs)?.[1];
+    const style = /\bstyle\s*=\s*["']([^"']+)["']/i.exec(attrs)?.[1] || "";
+
+    const reasons: string[] = [];
+    let primaryType: DetectedTracker["type"] | null = null;
+
+    const isTinyAttr =
+      (widthAttr === "1" || widthAttr === "0") && (heightAttr === "1" || heightAttr === "0");
+    if (isTinyAttr) {
+      primaryType = "pixel_1x1";
+      reasons.push(`${widthAttr}x${heightAttr} image`);
+    }
+
+    const styleLower = style.toLowerCase();
+    const hiddenStyle =
+      /display\s*:\s*none/.test(styleLower) ||
+      /visibility\s*:\s*hidden/.test(styleLower) ||
+      /opacity\s*:\s*0(\b|;|$)/.test(styleLower);
+    const zeroDimStyle = /(width|height)\s*:\s*0(px|%|)?\b/.test(styleLower);
+    if (hiddenStyle || zeroDimStyle) {
+      primaryType = primaryType || "hidden_css";
+      reasons.push(hiddenStyle ? "hidden via CSS" : "zero dimensions via CSS");
+    }
+
+    const isKnown = KNOWN_TRACKER_DOMAINS.some(
+      (d) => domain === d || domain.endsWith("." + d),
+    );
+    if (isKnown) {
+      primaryType = primaryType || "known_tracker_domain";
+      reasons.push(`known tracker domain: ${domain}`);
+    }
+
+    if (SUSPICIOUS_TRACKER_PATHS.some((p) => p.test(src))) {
+      primaryType = primaryType || "suspicious_path";
+      reasons.push("suspicious tracker URL path");
+    }
+
+    if (primaryType) {
+      const truncatedUrl = src.length > 200 ? src.slice(0, 200) + "..." : src;
+      found.push({ url: truncatedUrl, domain, type: primaryType, reasons });
+    }
+  }
+
+  return found;
+}
+
+export async function handleScanTrackingPixels(
+  gmail: gmail_v1.Gmail,
+  args: unknown,
+): Promise<ToolResponse> {
+  const validation = validateArgs(ScanTrackingPixelsSchema, args);
+  if (!validation.success) return validation.response;
+  const { id } = validation.data;
+  const ids = Array.isArray(id) ? id : [id];
+
+  type Result = {
+    id: string;
+    subject: string;
+    from: string;
+    trackerCount: number;
+    trackers: DetectedTracker[];
+  };
+
+  const results: Result[] = [];
+  for (const msgId of ids) {
+    try {
+      const msg = await gmail.users.messages.get({ userId: "me", id: msgId, format: "full" });
+      const headers = parseEmailHeaders(msg.data.payload?.headers || []);
+      const body = extractEmailBody(msg.data.payload);
+      const trackers = detectTrackingPixels(body.html);
+      results.push({
+        id: msgId,
+        subject: headers.subject || "(no subject)",
+        from: headers.from || "(unknown)",
+        trackerCount: trackers.length,
+        trackers,
+      });
+    } catch (err) {
+      log("Tracking-pixel scan failed for message", {
+        id: msgId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      results.push({
+        id: msgId,
+        subject: "(failed to read)",
+        from: "(unknown)",
+        trackerCount: 0,
+        trackers: [],
+      });
+    }
+  }
+
+  const totalTrackers = results.reduce((a, r) => a + r.trackerCount, 0);
+  const withTrackers = results.filter((r) => r.trackerCount > 0).length;
+
+  const textLines = [
+    `Scanned ${results.length} message(s). ${withTrackers} contain tracking pixels (${totalTrackers} total).`,
+    "",
+    ...results.map((r) => {
+      const header = `[${r.trackerCount}] ${r.subject} — ${r.from} (id: ${r.id})`;
+      if (r.trackerCount === 0) return header;
+      const detail = r.trackers
+        .map((t) => `    • ${t.type} @ ${t.domain} — ${t.reasons.join("; ")}`)
+        .join("\n");
+      return `${header}\n${detail}`;
+    }),
+  ];
+
+  log("Scanned tracking pixels", { messages: results.length, totalTrackers });
+
+  return structuredResponse(textLines.join("\n"), {
+    totalMessages: results.length,
+    totalTrackers,
+    messagesWithTrackers: withTrackers,
+    results,
+  });
 }
 
 export async function handleDeleteDraft(
