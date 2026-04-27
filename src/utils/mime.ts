@@ -9,6 +9,7 @@ export interface EmailAttachment {
   filename: string;
   content?: string; // Base64 encoded
   filePath?: string; // Absolute server-side path (read automatically)
+  sourceUrl?: string; // HTTP(S) URL the server fetches and base64-encodes (e.g. presigned MinIO URL)
   mimeType?: string;
 }
 
@@ -28,13 +29,39 @@ export interface EmailOptions {
 
 /**
  * Resolve attachment content: if filePath is provided, read and base64-encode it.
+ * sourceUrl attachments must be pre-resolved via resolveAttachments() before calling buildMimeMessage.
  */
 function resolveAttachmentContent(attachment: EmailAttachment): string {
   if (attachment.content) return attachment.content;
   if (attachment.filePath) {
     return readFileSync(attachment.filePath).toString("base64");
   }
-  throw new Error(`Attachment "${attachment.filename}" has neither content nor filePath`);
+  if (attachment.sourceUrl) {
+    throw new Error(`Attachment "${attachment.filename}" has sourceUrl but was not pre-resolved — call resolveAttachments() first`);
+  }
+  throw new Error(`Attachment "${attachment.filename}" has neither content, filePath, nor sourceUrl`);
+}
+
+/**
+ * Pre-resolve sourceUrl attachments by fetching the URL and base64-encoding the body.
+ * Other attachment types (content, filePath) pass through unchanged.
+ * Call this before buildMimeMessage when any attachment may have sourceUrl.
+ */
+export async function resolveAttachments(attachments: EmailAttachment[] | undefined): Promise<EmailAttachment[] | undefined> {
+  if (!attachments || attachments.length === 0) return attachments;
+  return Promise.all(
+    attachments.map(async (att) => {
+      if (att.sourceUrl && !att.content && !att.filePath) {
+        const res = await fetch(att.sourceUrl);
+        if (!res.ok) {
+          throw new Error(`Failed to fetch sourceUrl for "${att.filename}": ${res.status} ${res.statusText}`);
+        }
+        const buf = Buffer.from(await res.arrayBuffer());
+        return { ...att, content: buf.toString("base64"), sourceUrl: undefined };
+      }
+      return att;
+    }),
+  );
 }
 
 /**

@@ -5,6 +5,7 @@ import {
   errorResponse,
   validateArgs,
   buildMimeMessage,
+  resolveAttachments,
   parseEmailHeaders,
   decodeBase64Url,
   truncateResponse,
@@ -185,6 +186,8 @@ export async function handleSendEmail(gmail: gmail_v1.Gmail, args: unknown): Pro
 
   const effectiveHtml = rtl ? applyRtlWrapping(body, html) : html;
 
+  const resolvedAttachments = await resolveAttachments(attachments);
+
   const raw = buildMimeMessage({
     to,
     subject,
@@ -194,7 +197,7 @@ export async function handleSendEmail(gmail: gmail_v1.Gmail, args: unknown): Pro
     bcc,
     replyTo,
     from,
-    attachments,
+    attachments: resolvedAttachments,
     inReplyTo,
   });
 
@@ -229,6 +232,8 @@ export async function handleDraftEmail(
 
   const effectiveHtml = rtl ? applyRtlWrapping(body || "", html) : html;
 
+  const resolvedAttachments = await resolveAttachments(attachments);
+
   const raw = buildMimeMessage({
     to: to || [],
     subject: subject || "",
@@ -237,7 +242,7 @@ export async function handleDraftEmail(
     cc,
     bcc,
     replyTo,
-    attachments,
+    attachments: resolvedAttachments,
   });
 
   const messagePayload = { raw, threadId };

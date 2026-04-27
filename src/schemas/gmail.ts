@@ -98,22 +98,24 @@ export type EmailAddressInput = z.infer<typeof EmailAddressSchema>;
 
 /**
  * Attachment for sending emails.
- * Provide either `content` (base64-encoded) or `filePath` (absolute server-side path).
- * When filePath is given, the server reads and base64-encodes the file automatically.
+ * Provide exactly one of `content` (base64), `filePath` (server-local), or `sourceUrl`
+ * (HTTP(S) URL the server fetches — ideal for presigned MinIO/S3 URLs from remote clients).
  */
 export const AttachmentSchema = z
   .object({
     filename: z.string().min(1, "Filename required"),
     content: z.string().optional().describe("Base64-encoded content"),
     filePath: z.string().optional().describe("Absolute file path on the server (read and encoded automatically)"),
+    sourceUrl: z.string().url().optional().describe("HTTP(S) URL the server fetches and base64-encodes (e.g. presigned MinIO URL)"),
     mimeType: z.string().optional().describe("MIME type (auto-detected if not provided)"),
   })
-  .refine((data) => data.content || data.filePath, {
-    message: "Either content or filePath must be provided",
+  .refine((data) => data.content || data.filePath || data.sourceUrl, {
+    message: "One of content, filePath, or sourceUrl must be provided",
   })
-  .refine((data) => !(data.content && data.filePath), {
-    message: "Provide either content or filePath, not both",
-  });
+  .refine(
+    (data) => [data.content, data.filePath, data.sourceUrl].filter(Boolean).length === 1,
+    { message: "Provide exactly one of content, filePath, or sourceUrl" },
+  );
 
 export type AttachmentInput = z.infer<typeof AttachmentSchema>;
 
