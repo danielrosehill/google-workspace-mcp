@@ -67,6 +67,7 @@ workspace: "personal" | "business"
 ```
 
 Server-side config (`/opt/mcp/gws/credentials/workspaces.json`):
+
 ```json
 {
   "personal": {
@@ -85,6 +86,7 @@ Server-side config (`/opt/mcp/gws/credentials/workspaces.json`):
 ```
 
 Can also be configured via env vars for containerized deployments:
+
 ```
 GWS_WORKSPACES_CONFIG=/opt/mcp/gws/credentials/workspaces.json
 ```
@@ -94,6 +96,7 @@ The auth layer (`src/auth/`) resolves workspace → credentials at call time. Ea
 ### 2. Auth & Credential Management
 
 **Initial setup (one-time per workspace):**
+
 1. Place GCP OAuth client credentials (`client.json`) on the server
 2. Run a setup CLI command: `npx google-workspace-mcp auth --workspace personal`
 3. This opens a browser / prints a URL for OAuth consent
@@ -101,11 +104,13 @@ The auth layer (`src/auth/`) resolves workspace → credentials at call time. Ea
 5. Subsequent requests use the refresh token automatically
 
 **Token lifecycle:**
+
 - Access tokens expire after ~1 hour — the Google client library handles refresh automatically using the stored refresh token
 - If a refresh token is revoked or expires, the tool returns a clear error indicating re-auth is needed for that workspace
 - No credentials or tokens are ever sent to or stored on the user's machine
 
 **Security considerations:**
+
 - Credential directory should be readable only by the MCP server process (`chmod 700`)
 - In Docker deployments, mount the credential directory as a volume
 - The `workspaces.json` file and token files should never be committed to git (already in `.gitignore`)
@@ -115,6 +120,7 @@ The auth layer (`src/auth/`) resolves workspace → credentials at call time. Ea
 Streamable HTTP transport is **required** (not optional) for the aggregator deployment model. stdio is retained for local development and testing only.
 
 The server listens on a configurable port:
+
 ```
 GWS_MCP_PORT=3100
 GWS_MCP_HOST=127.0.0.1
@@ -125,6 +131,7 @@ In production behind the aggregator, it binds to localhost only — the aggregat
 ### 3. Tool surface — keep only what's needed
 
 #### Gmail (priority: highest)
+
 - `gmail_search` — search messages
 - `gmail_read` — read message content
 - `gmail_draft` — create draft (plain/HTML, with optional attachments)
@@ -134,6 +141,7 @@ In production behind the aggregator, it binds to localhost only — the aggregat
 - `gmail_modify_labels` — add/remove labels from messages (phase 2)
 
 #### Calendar
+
 - `calendar_list` — list calendars
 - `calendar_get_events` — get events by date range
 - `calendar_create_event` — create event (with attendees, recurrence)
@@ -141,6 +149,7 @@ In production behind the aggregator, it binds to localhost only — the aggregat
 - `calendar_delete_event` — delete event
 
 #### Contacts
+
 - `contacts_list` — list contacts
 - `contacts_search` — search contacts
 - `contacts_create` — create contact
@@ -148,6 +157,7 @@ In production behind the aggregator, it binds to localhost only — the aggregat
 - `contacts_delete` — delete contact
 
 #### Drive
+
 - `drive_list` — list files/folders
 - `drive_search` — search files
 - `drive_read` — read file content
@@ -157,6 +167,7 @@ In production behind the aggregator, it binds to localhost only — the aggregat
 - `drive_share` — manage permissions
 
 #### Docs
+
 - `docs_create` — create document
 - `docs_read` — read content
 - `docs_modify` — modify text
@@ -165,6 +176,7 @@ In production behind the aggregator, it binds to localhost only — the aggregat
 - `docs_comments` — read/create/reply/resolve comments
 
 #### Sheets (lowest priority)
+
 - `sheets_create` — create spreadsheet
 - `sheets_read` — read cell values
 - `sheets_write` — write/modify cells
@@ -180,6 +192,7 @@ In production behind the aggregator, it binds to localhost only — the aggregat
 ## Phases
 
 ### Phase 1 — Multi-workspace + Gmail
+
 - Add workspace config/resolution layer
 - Wire workspace param into all Gmail tools
 - Verify attachment send/draft works
@@ -187,14 +200,17 @@ In production behind the aggregator, it binds to localhost only — the aggregat
 - Deploy to MCP Jungle
 
 ### Phase 2 — Calendar + Contacts + Drive
+
 - Wire workspace into remaining handlers
 - Trim tool surface to only what's listed above
 
 ### Phase 3 — Docs + Sheets
+
 - Wire workspace into docs/sheets
 - Trim tool surface
 
 ### Phase 4 — Cleanup
+
 - Remove unused handlers (slides, unified, discovery)
 - Remove unused schemas, tests, utils
 - Update README

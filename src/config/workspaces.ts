@@ -109,9 +109,7 @@ export async function loadWorkspacesConfig(): Promise<Map<string, WorkspaceEntry
     throw new Error("Workspaces config has no workspace entries");
   }
   if (names.length > MAX_WORKSPACES) {
-    throw new Error(
-      `Too many workspaces (${names.length}). Maximum is ${MAX_WORKSPACES}.`,
-    );
+    throw new Error(`Too many workspaces (${names.length}). Maximum is ${MAX_WORKSPACES}.`);
   }
 
   const result = new Map<string, WorkspaceEntry>();
@@ -136,9 +134,7 @@ export async function getWorkspace(name: string): Promise<WorkspaceEntry> {
   const entry = config.get(name);
   if (!entry) {
     const available = Array.from(config.keys());
-    throw new Error(
-      `Unknown workspace "${name}". Available: ${available.join(", ")}`,
-    );
+    throw new Error(`Unknown workspace "${name}". Available: ${available.join(", ")}`);
   }
   return entry;
 }
@@ -153,9 +149,7 @@ export function resetWorkspacesCache(): void {
   cachedConfigPath = null;
 }
 
-export async function saveWorkspacesConfig(
-  workspaces: Map<string, WorkspaceEntry>,
-): Promise<void> {
+export async function saveWorkspacesConfig(workspaces: Map<string, WorkspaceEntry>): Promise<void> {
   if (workspaces.size > MAX_WORKSPACES) {
     throw new Error(`Too many workspaces (${workspaces.size}). Maximum is ${MAX_WORKSPACES}.`);
   }

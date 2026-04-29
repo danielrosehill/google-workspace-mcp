@@ -1,0 +1,10 @@
+{
+  "name": "google-workspace-mcp",
+  "version": "4.5.0",
+  "mcpServers": {
+    "google-workspace-mcp": {
+      "command": "npx",
+      "args": ["-y", "@danielrosehill/google-workspace-mcp"]
+    }
+  }
+}

@@ -41,9 +41,7 @@ export interface WorkspaceServices {
 const workspaceCache = new Map<string, CachedWorkspaceAuth>();
 const authInProgress = new Map<string, Promise<CachedWorkspaceAuth>>();
 
-async function loadClientCredentials(
-  entry: WorkspaceEntry,
-): Promise<{
+async function loadClientCredentials(entry: WorkspaceEntry): Promise<{
   client_id: string;
   client_secret?: string;
   redirect_uris?: string[];
@@ -82,15 +80,10 @@ async function initWorkspace(name: string): Promise<CachedWorkspaceAuth> {
   const authClient = new OAuth2Client({
     clientId: creds.client_id,
     clientSecret: creds.client_secret || undefined,
-    redirectUri:
-      creds.redirect_uris?.[0] || "http://127.0.0.1/oauth2callback",
+    redirectUri: creds.redirect_uris?.[0] || "http://127.0.0.1/oauth2callback",
   });
 
-  const tokenManager = new TokenManager(
-    authClient,
-    entry.email,
-    entry.tokenPath,
-  );
+  const tokenManager = new TokenManager(authClient, entry.email, entry.tokenPath);
   const hasTokens = await tokenManager.validateTokens();
 
   if (!hasTokens) {
@@ -115,9 +108,7 @@ async function initWorkspace(name: string): Promise<CachedWorkspaceAuth> {
   };
 }
 
-export async function getWorkspaceServices(
-  workspace: string,
-): Promise<WorkspaceServices> {
+export async function getWorkspaceServices(workspace: string): Promise<WorkspaceServices> {
   const cached = workspaceCache.get(workspace);
   if (cached) {
     return cached;

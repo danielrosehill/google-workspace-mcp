@@ -2938,6 +2938,17 @@ export const gmailTools: ToolDefinition[] = [
           description: 'BCC recipients as an array, e.g. ["user@example.com"]',
         },
         replyTo: { type: "string", description: "Reply-to address" },
+        from: {
+          type: "string",
+          description:
+            'Override the From header. Must match a Gmail "Send mail as" alias on the ' +
+            "authenticated account (Settings → Accounts → Send mail as) — Gmail rejects sends " +
+            "from unconfigured addresses. Format: 'Display Name <alias@example.com>' or just " +
+            "'alias@example.com'. Use for persona sends (herman@, claude@, etc.) so the From: " +
+            "address matches the persona; without it, Gmail sends from the workspace's primary " +
+            "identity. Each alias has its own Gmail-managed signature, so don't inject a " +
+            "signature into the body.",
+        },
         attachments: {
           type: "array",
           description:
@@ -3012,8 +3023,16 @@ export const gmailTools: ToolDefinition[] = [
           description: 'BCC recipients as an array, e.g. ["user@example.com"]',
         },
         replyTo: { type: "string" },
+        from: {
+          type: "string",
+          description:
+            'Override the From header. Must match a Gmail "Send mail as" alias on the ' +
+            "authenticated account. Format: 'Display Name <alias@example.com>' or " +
+            "'alias@example.com'. See send_email for details.",
+        },
         attachments: { type: "array" },
         threadId: { type: "string" },
+        inReplyTo: { type: "string", description: "Message-ID for threading" },
         rtl: {
           type: "boolean",
           description:

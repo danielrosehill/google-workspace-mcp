@@ -84,7 +84,12 @@ export interface StatusData extends Record<string, unknown> {
   uptime_seconds: number;
   timestamp: string;
   profile: string | null;
-  workspace: { name: string; label?: string; tokenPath?: string; clientCredentials?: string } | null;
+  workspace: {
+    name: string;
+    label?: string;
+    tokenPath?: string;
+    clientCredentials?: string;
+  } | null;
   auth: {
     configured: boolean;
     credential_source: "env_var" | "file" | "none";

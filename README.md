@@ -201,6 +201,7 @@ npx @danielrosehill/google-workspace-mcp start
 ```
 
 Connect clients to workspace-specific URLs:
+
 - `http://host:3200/mcp/personal` — routes to the personal workspace
 - `http://host:3200/mcp/business` — routes to the business workspace
 
@@ -208,15 +209,15 @@ Each workspace gets its own OAuth tokens, sender name, and signature. The `works
 
 #### Workspace Config Fields
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `email` | yes | Google account email |
-| `clientCredentials` | yes | Path to OAuth `client.json` |
-| `tokenPath` | yes | Path to store OAuth tokens |
-| `label` | no | Display label (defaults to workspace name) |
-| `senderName` | no | Display name for outgoing emails (e.g., "Daniel Rosehill") |
-| `signature` | no | Plain text signature auto-appended to email body |
-| `signatureHtml` | no | HTML signature auto-appended to email HTML part |
+| Field               | Required | Description                                                |
+| ------------------- | -------- | ---------------------------------------------------------- |
+| `email`             | yes      | Google account email                                       |
+| `clientCredentials` | yes      | Path to OAuth `client.json`                                |
+| `tokenPath`         | yes      | Path to store OAuth tokens                                 |
+| `label`             | no       | Display label (defaults to workspace name)                 |
+| `senderName`        | no       | Display name for outgoing emails (e.g., "Daniel Rosehill") |
+| `signature`         | no       | Plain text signature auto-appended to email body           |
+| `signatureHtml`     | no       | HTML signature auto-appended to email HTML part            |
 
 ### Email Attachments
 

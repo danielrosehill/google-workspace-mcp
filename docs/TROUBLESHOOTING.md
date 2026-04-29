@@ -123,6 +123,7 @@ curl -F "file=@report.pdf" http://server:3201/upload
 ```
 
 Then call `upload_file` with the returned path:
+
 ```json
 {
   "name": "report.pdf",
@@ -149,6 +150,7 @@ Then use `sourcePath` + `cleanupSource: true` as above.
 #### Option 3: Use base64Content
 
 For smaller files (under ~5MB), encode as base64 and pass directly:
+
 ```json
 {
   "name": "file.pdf",

@@ -5,6 +5,5 @@ export const WorkspaceField = z
   .min(1)
   .max(32)
   .describe(
-    "Workspace name (e.g. 'personal', 'business'). " +
-      "Must match an entry in workspaces.json.",
+    "Workspace name (e.g. 'personal', 'business'). " + "Must match an entry in workspaces.json.",
   );

@@ -37,9 +37,13 @@ function resolveAttachmentContent(attachment: EmailAttachment): string {
     return readFileSync(attachment.filePath).toString("base64");
   }
   if (attachment.sourceUrl) {
-    throw new Error(`Attachment "${attachment.filename}" has sourceUrl but was not pre-resolved — call resolveAttachments() first`);
+    throw new Error(
+      `Attachment "${attachment.filename}" has sourceUrl but was not pre-resolved — call resolveAttachments() first`,
+    );
   }
-  throw new Error(`Attachment "${attachment.filename}" has neither content, filePath, nor sourceUrl`);
+  throw new Error(
+    `Attachment "${attachment.filename}" has neither content, filePath, nor sourceUrl`,
+  );
 }
 
 /**
@@ -47,14 +51,18 @@ function resolveAttachmentContent(attachment: EmailAttachment): string {
  * Other attachment types (content, filePath) pass through unchanged.
  * Call this before buildMimeMessage when any attachment may have sourceUrl.
  */
-export async function resolveAttachments(attachments: EmailAttachment[] | undefined): Promise<EmailAttachment[] | undefined> {
+export async function resolveAttachments(
+  attachments: EmailAttachment[] | undefined,
+): Promise<EmailAttachment[] | undefined> {
   if (!attachments || attachments.length === 0) return attachments;
   return Promise.all(
     attachments.map(async (att) => {
       if (att.sourceUrl && !att.content && !att.filePath) {
         const res = await fetch(att.sourceUrl);
         if (!res.ok) {
-          throw new Error(`Failed to fetch sourceUrl for "${att.filename}": ${res.status} ${res.statusText}`);
+          throw new Error(
+            `Failed to fetch sourceUrl for "${att.filename}": ${res.status} ${res.statusText}`,
+          );
         }
         const buf = Buffer.from(await res.arrayBuffer());
         return { ...att, content: buf.toString("base64"), sourceUrl: undefined };
@@ -118,7 +126,8 @@ function detectMimeType(filename: string): string {
  * Returns a base64url-encoded string ready for the Gmail API.
  */
 export function buildMimeMessage(options: EmailOptions): string {
-  const { to, subject, body, html, cc, bcc, replyTo, from, attachments, inReplyTo, references } = options;
+  const { to, subject, body, html, cc, bcc, replyTo, from, attachments, inReplyTo, references } =
+    options;
 
   const hasHtml = !!html;
   const hasAttachments = attachments && attachments.length > 0;

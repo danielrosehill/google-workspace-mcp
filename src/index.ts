@@ -12,13 +12,16 @@ import {
   GetPromptRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { google } from "googleapis";
-import type { drive_v3, docs_v1, sheets_v4, slides_v1, calendar_v3, gmail_v1, people_v1 } from "googleapis";
-import {
-  authenticate,
-  AuthServer,
-  initializeOAuth2Client,
-  getWorkspaceServices,
-} from "./auth.js";
+import type {
+  drive_v3,
+  docs_v1,
+  sheets_v4,
+  slides_v1,
+  calendar_v3,
+  gmail_v1,
+  people_v1,
+} from "googleapis";
+import { authenticate, AuthServer, initializeOAuth2Client, getWorkspaceServices } from "./auth.js";
 import type { OAuth2Client } from "google-auth-library";
 import { fileURLToPath } from "url";
 import { readFileSync } from "fs";
@@ -279,10 +282,10 @@ function createMcpServer(defaultWorkspace?: string): Server {
         "On any tool error, call get_status for diagnostics before asking the user to debug. " +
         "When sending or drafting email in an RTL language (Hebrew, Arabic, Farsi, Urdu), " +
         "always pass rtl: true to send_email / draft_email so the body is wrapped in an " +
-        "HTML dir=\"rtl\" container and renders right-aligned across all mail clients. Do not " +
+        'HTML dir="rtl" container and renders right-aligned across all mail clients. Do not ' +
         "rely on client auto-detection for plain-text bodies. " +
         "Recipient resolution: if the user refers to a recipient by name or nickname without " +
-        "giving an email address (e.g. \"send this to Alice\", \"email mum\"), call " +
+        'giving an email address (e.g. "send this to Alice", "email mum"), call ' +
         "search_contacts first to resolve the address before calling send_email or draft_email. " +
         "If search returns multiple plausible matches, ask the user to disambiguate; if it " +
         "returns none, ask for the address. Do not invent or guess email addresses.",
@@ -354,492 +357,491 @@ async function ensureAuthenticated() {
 // -----------------------------------------------------------------------------
 
 function registerHandlers(s: Server, defaultWorkspace?: string): void {
+  s.setRequestHandler(ListResourcesRequestSchema, async (request) => {
+    await ensureAuthenticated();
+    log("Handling ListResources request", { params: request.params });
+    const pageSize = 10;
+    const params: {
+      pageSize: number;
+      fields: string;
+      pageToken?: string;
+      q: string;
+      includeItemsFromAllDrives: boolean;
+      supportsAllDrives: boolean;
+    } = {
+      pageSize,
+      fields: "nextPageToken, files(id, name, mimeType)",
+      q: `trashed = false`,
+      includeItemsFromAllDrives: true,
+      supportsAllDrives: true,
+    };
 
-s.setRequestHandler(ListResourcesRequestSchema, async (request) => {
-  await ensureAuthenticated();
-  log("Handling ListResources request", { params: request.params });
-  const pageSize = 10;
-  const params: {
-    pageSize: number;
-    fields: string;
-    pageToken?: string;
-    q: string;
-    includeItemsFromAllDrives: boolean;
-    supportsAllDrives: boolean;
-  } = {
-    pageSize,
-    fields: "nextPageToken, files(id, name, mimeType)",
-    q: `trashed = false`,
-    includeItemsFromAllDrives: true,
-    supportsAllDrives: true,
-  };
-
-  if (request.params?.cursor) {
-    params.pageToken = request.params.cursor;
-  }
-
-  const res = await drive!.files.list(params);
-  log("Listed files", { count: res.data.files?.length });
-  const files = res.data.files || [];
-
-  return {
-    resources: files.map((file: drive_v3.Schema$File) => ({
-      uri: `gdrive:///${file.id}`,
-      mimeType: file.mimeType || "application/octet-stream",
-      name: file.name || "Untitled",
-    })),
-    nextCursor: res.data.nextPageToken,
-  };
-});
-
-s.setRequestHandler(ReadResourceRequestSchema, async (request) => {
-  await ensureAuthenticated();
-  log("Handling ReadResource request", { uri: request.params.uri });
-  const fileId = request.params.uri.replace("gdrive:///", "");
-
-  const file = await drive!.files.get({
-    fileId,
-    fields: "mimeType",
-    supportsAllDrives: true,
-  });
-  const mimeType = file.data.mimeType;
-
-  if (!mimeType) {
-    throw new Error("File has no MIME type.");
-  }
-
-  if (mimeType.startsWith("application/vnd.google-apps")) {
-    // Export logic for Google Docs/Sheets/Slides
-    let exportMimeType;
-    switch (mimeType) {
-      case "application/vnd.google-apps.document":
-        exportMimeType = "text/markdown";
-        break;
-      case "application/vnd.google-apps.spreadsheet":
-        exportMimeType = "text/csv";
-        break;
-      case "application/vnd.google-apps.presentation":
-        exportMimeType = "text/plain";
-        break;
-      case "application/vnd.google-apps.drawing":
-        exportMimeType = "image/png";
-        break;
-      default:
-        exportMimeType = "text/plain";
-        break;
+    if (request.params?.cursor) {
+      params.pageToken = request.params.cursor;
     }
 
-    const res = await drive!.files.export(
-      { fileId, mimeType: exportMimeType },
-      { responseType: "text" },
-    );
+    const res = await drive!.files.list(params);
+    log("Listed files", { count: res.data.files?.length });
+    const files = res.data.files || [];
 
-    log("Successfully read resource", { fileId, mimeType });
     return {
-      contents: [
-        {
-          uri: request.params.uri,
-          mimeType: exportMimeType,
-          text: res.data,
-        },
-      ],
+      resources: files.map((file: drive_v3.Schema$File) => ({
+        uri: `gdrive:///${file.id}`,
+        mimeType: file.mimeType || "application/octet-stream",
+        name: file.name || "Untitled",
+      })),
+      nextCursor: res.data.nextPageToken,
     };
-  } else {
-    // Regular file download
-    const res = await drive!.files.get(
-      { fileId, alt: "media", supportsAllDrives: true },
-      { responseType: "arraybuffer" },
-    );
-    const contentMime = mimeType || "application/octet-stream";
+  });
 
-    if (contentMime.startsWith("text/") || contentMime === "application/json") {
+  s.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+    await ensureAuthenticated();
+    log("Handling ReadResource request", { uri: request.params.uri });
+    const fileId = request.params.uri.replace("gdrive:///", "");
+
+    const file = await drive!.files.get({
+      fileId,
+      fields: "mimeType",
+      supportsAllDrives: true,
+    });
+    const mimeType = file.data.mimeType;
+
+    if (!mimeType) {
+      throw new Error("File has no MIME type.");
+    }
+
+    if (mimeType.startsWith("application/vnd.google-apps")) {
+      // Export logic for Google Docs/Sheets/Slides
+      let exportMimeType;
+      switch (mimeType) {
+        case "application/vnd.google-apps.document":
+          exportMimeType = "text/markdown";
+          break;
+        case "application/vnd.google-apps.spreadsheet":
+          exportMimeType = "text/csv";
+          break;
+        case "application/vnd.google-apps.presentation":
+          exportMimeType = "text/plain";
+          break;
+        case "application/vnd.google-apps.drawing":
+          exportMimeType = "image/png";
+          break;
+        default:
+          exportMimeType = "text/plain";
+          break;
+      }
+
+      const res = await drive!.files.export(
+        { fileId, mimeType: exportMimeType },
+        { responseType: "text" },
+      );
+
+      log("Successfully read resource", { fileId, mimeType });
       return {
         contents: [
           {
             uri: request.params.uri,
-            mimeType: contentMime,
-            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Google API response data
-            text: Buffer.from(res.data as ArrayBuffer).toString("utf-8"),
+            mimeType: exportMimeType,
+            text: res.data,
           },
         ],
       };
     } else {
-      return {
-        contents: [
-          {
-            uri: request.params.uri,
-            mimeType: contentMime,
-            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Google API response data
-            blob: Buffer.from(res.data as ArrayBuffer).toString("base64"),
-          },
-        ],
-      };
+      // Regular file download
+      const res = await drive!.files.get(
+        { fileId, alt: "media", supportsAllDrives: true },
+        { responseType: "arraybuffer" },
+      );
+      const contentMime = mimeType || "application/octet-stream";
+
+      if (contentMime.startsWith("text/") || contentMime === "application/json") {
+        return {
+          contents: [
+            {
+              uri: request.params.uri,
+              mimeType: contentMime,
+              // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Google API response data
+              text: Buffer.from(res.data as ArrayBuffer).toString("utf-8"),
+            },
+          ],
+        };
+      } else {
+        return {
+          contents: [
+            {
+              uri: request.params.uri,
+              mimeType: contentMime,
+              // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Google API response data
+              blob: Buffer.from(res.data as ArrayBuffer).toString("base64"),
+            },
+          ],
+        };
+      }
     }
+  });
+
+  s.setRequestHandler(ListToolsRequestSchema, async () => {
+    return { tools: getAllTools() };
+  });
+
+  // -----------------------------------------------------------------------------
+  // PROMPT REQUEST HANDLERS
+  // -----------------------------------------------------------------------------
+
+  s.setRequestHandler(ListPromptsRequestSchema, async () => {
+    log("Handling ListPrompts request");
+    return {
+      prompts: PROMPTS.map((prompt) => ({
+        name: prompt.name,
+        description: prompt.description,
+        arguments: prompt.arguments,
+      })),
+    };
+  });
+
+  s.setRequestHandler(GetPromptRequestSchema, async (request) => {
+    log("Handling GetPrompt request", { name: request.params.name });
+
+    const promptName = request.params.name;
+    const promptDef = PROMPTS.find((p) => p.name === promptName);
+
+    if (!promptDef) {
+      throw new Error(`Unknown prompt: ${promptName}`);
+    }
+
+    const args = request.params.arguments || {};
+    const messages = generatePromptMessages(promptName, args);
+
+    return {
+      description: promptDef.description,
+      messages,
+    };
+  });
+
+  // -----------------------------------------------------------------------------
+  // TOOL REGISTRY
+  // -----------------------------------------------------------------------------
+
+  interface ToolServices {
+    drive: drive_v3.Drive;
+    docs: docs_v1.Docs;
+    sheets: sheets_v4.Sheets;
+    slides: slides_v1.Slides;
+    calendar: calendar_v3.Calendar;
+    gmail: gmail_v1.Gmail;
+    people: people_v1.People;
+    context: HandlerContext;
   }
-});
 
-s.setRequestHandler(ListToolsRequestSchema, async () => {
-  return { tools: getAllTools() };
-});
+  type ToolHandler = (services: ToolServices, args: unknown) => Promise<ToolResponse>;
 
-// -----------------------------------------------------------------------------
-// PROMPT REQUEST HANDLERS
-// -----------------------------------------------------------------------------
+  function createToolRegistry(): Record<string, ToolHandler> {
+    const registry: Record<string, ToolHandler> = {};
 
-s.setRequestHandler(ListPromptsRequestSchema, async () => {
-  log("Handling ListPrompts request");
-  return {
-    prompts: PROMPTS.map((prompt) => ({
-      name: prompt.name,
-      description: prompt.description,
-      arguments: prompt.arguments,
-    })),
-  };
-});
+    // Discovery and status tools (always available, no auth required for status)
+    Object.assign(registry, {
+      list_tools: (_services, args) => handleListTools(args),
+      get_status: ({ drive }, args) => {
+        // Mirror the dispatcher: ensure workspace is threaded through so
+        // per-workspace token/cred paths are checked.
+        const statusArgs: Record<string, unknown> = {
+          ...((args as Record<string, unknown>) ?? {}),
+        };
+        if (!statusArgs.workspace && defaultWorkspace) {
+          statusArgs.workspace = defaultWorkspace;
+        }
+        return handleGetStatus(authClient, drive, VERSION, statusArgs);
+      },
+    } satisfies Record<string, ToolHandler>);
 
-s.setRequestHandler(GetPromptRequestSchema, async (request) => {
-  log("Handling GetPrompt request", { name: request.params.name });
+    // Drive tools
+    if (isServiceEnabled("drive")) {
+      Object.assign(registry, {
+        search: ({ drive }, args) => handleSearch(drive, args),
+        create_text_file: ({ drive }, args) => handleCreateTextFile(drive, args),
+        update_text_file: ({ drive }, args) => handleUpdateTextFile(drive, args),
+        create_folder: ({ drive }, args) => handleCreateFolder(drive, args),
+        list_folder: ({ drive }, args) => handleListFolder(drive, args),
+        delete_item: ({ drive }, args) => handleDeleteItem(drive, args),
+        rename_item: ({ drive }, args) => handleRenameItem(drive, args),
+        move_item: ({ drive }, args) => handleMoveItem(drive, args),
+        copy_file: ({ drive }, args) => handleCopyFile(drive, args),
+        get_file_metadata: ({ drive }, args) => handleGetFileMetadata(drive, args),
+        export_file: ({ drive }, args) => handleExportFile(drive, args),
+        share_file: ({ drive }, args) => handleShareFile(drive, args),
+        get_sharing: ({ drive }, args) => handleGetSharing(drive, args),
+        list_revisions: ({ drive }, args) => handleListRevisions(drive, args),
+        restore_revision: ({ drive }, args) => handleRestoreRevision(drive, args),
+        download_file: ({ drive }, args) => handleDownloadFile(drive, args),
+        upload_file: ({ drive }, args) => handleUploadFile(drive, args),
+        get_storage_quota: ({ drive }, args) => handleGetStorageQuota(drive, args),
+        star_file: ({ drive }, args) => handleStarFile(drive, args),
+        resolve_file_path: ({ drive, context }, args) =>
+          handleResolveFilePath(drive, args, context),
+        batch_delete: ({ drive, context }, args) => handleBatchDelete(drive, args, context),
+        batch_restore: ({ drive, context }, args) => handleBatchRestore(drive, args, context),
+        batch_move: ({ drive, context }, args) => handleBatchMove(drive, args, context),
+        batch_share: ({ drive, context }, args) => handleBatchShare(drive, args, context),
+        remove_permission: ({ drive }, args) => handleRemovePermission(drive, args),
+        list_trash: ({ drive }, args) => handleListTrash(drive, args),
+        restore_from_trash: ({ drive }, args) => handleRestoreFromTrash(drive, args),
+        empty_trash: ({ drive, context }, args) => handleEmptyTrash(drive, args, context),
+        get_folder_tree: ({ drive }, args) => handleGetFolderTree(drive, args),
+      } satisfies Record<string, ToolHandler>);
+    }
 
-  const promptName = request.params.name;
-  const promptDef = PROMPTS.find((p) => p.name === promptName);
+    // Docs tools
+    if (isServiceEnabled("docs")) {
+      Object.assign(registry, {
+        create_google_doc: ({ drive, docs }, args) => handleCreateGoogleDoc(drive, docs, args),
+        update_google_doc: ({ docs }, args) => handleUpdateGoogleDoc(docs, args),
+        get_google_doc_content: ({ drive, docs }, args) =>
+          handleGetGoogleDocContent(drive, docs, args),
+        append_to_doc: ({ docs }, args) => handleAppendToDoc(docs, args),
+        insert_text_in_doc: ({ docs }, args) => handleInsertTextInDoc(docs, args),
+        delete_text_in_doc: ({ docs }, args) => handleDeleteTextInDoc(docs, args),
+        replace_text_in_doc: ({ docs }, args) => handleReplaceTextInDoc(docs, args),
+        format_google_doc_range: ({ docs }, args) => handleFormatGoogleDocRange(docs, args),
+      } satisfies Record<string, ToolHandler>);
+    }
 
-  if (!promptDef) {
-    throw new Error(`Unknown prompt: ${promptName}`);
+    // Sheets tools
+    if (isServiceEnabled("sheets")) {
+      Object.assign(registry, {
+        create_google_sheet: ({ drive, sheets }, args) =>
+          handleCreateGoogleSheet(drive, sheets, args),
+        update_google_sheet: ({ sheets }, args) => handleUpdateGoogleSheet(sheets, args),
+        get_google_sheet_content: ({ drive, sheets }, args) =>
+          handleGetGoogleSheetContent(drive, sheets, args),
+        format_google_sheet_cells: ({ sheets }, args) => handleFormatGoogleSheetCells(sheets, args),
+        merge_google_sheet_cells: ({ sheets }, args) => handleMergeGoogleSheetCells(sheets, args),
+        add_google_sheet_conditional_format: ({ sheets }, args) =>
+          handleAddGoogleSheetConditionalFormat(sheets, args),
+        sheet_tabs: ({ sheets }, args) => handleSheetTabs(sheets, args),
+      } satisfies Record<string, ToolHandler>);
+    }
+
+    // Slides tools
+    if (isServiceEnabled("slides")) {
+      Object.assign(registry, {
+        create_google_slides: ({ drive, slides }, args) =>
+          handleCreateGoogleSlides(drive, slides, args),
+        update_google_slides: ({ slides }, args) => handleUpdateGoogleSlides(slides, args),
+        get_google_slides_content: ({ drive, slides }, args) =>
+          handleGetGoogleSlidesContent(drive, slides, args),
+        create_google_slides_text_box: ({ slides }, args) =>
+          handleCreateGoogleSlidesTextBox(slides, args),
+        create_google_slides_shape: ({ slides }, args) =>
+          handleCreateGoogleSlidesShape(slides, args),
+        slides_speaker_notes: ({ slides }, args) => handleSlidesSpeakerNotes(slides, args),
+        format_slides_text: ({ slides }, args) => handleFormatSlidesText(slides, args),
+        format_slides_shape: ({ slides }, args) => handleFormatSlidesShape(slides, args),
+        format_slide_background: ({ slides }, args) => handleFormatSlideBackground(slides, args),
+        list_slide_pages: ({ slides }, args) => handleListSlidePages(slides, args),
+      } satisfies Record<string, ToolHandler>);
+    }
+
+    // Unified smart tools (require drive+docs+sheets+slides)
+    if (areUnifiedToolsEnabled()) {
+      Object.assign(registry, {
+        create_file: ({ drive, docs, sheets, slides }, args) =>
+          handleCreateFile(drive, docs, sheets, slides, args),
+        update_file: ({ drive, docs, sheets, slides }, args) =>
+          handleUpdateFile(drive, docs, sheets, slides, args),
+        get_file_content: ({ drive, docs, sheets, slides }, args) =>
+          handleGetFileContent(drive, docs, sheets, slides, args),
+      } satisfies Record<string, ToolHandler>);
+    }
+
+    // Calendar tools
+    if (isServiceEnabled("calendar")) {
+      Object.assign(registry, {
+        list_calendars: ({ calendar }, args) => handleListCalendars(calendar, args),
+        list_events: ({ calendar }, args) => handleListEvents(calendar, args),
+        get_event: ({ calendar }, args) => handleGetEvent(calendar, args),
+        create_event: ({ calendar }, args) => handleCreateEvent(calendar, args),
+        update_event: ({ calendar }, args) => handleUpdateEvent(calendar, args),
+        delete_event: ({ calendar }, args) => handleDeleteEvent(calendar, args),
+        find_free_time: ({ calendar }, args) => handleFindFreeTime(calendar, args),
+      } satisfies Record<string, ToolHandler>);
+    }
+
+    // Gmail tools
+    if (isServiceEnabled("gmail")) {
+      Object.assign(registry, {
+        send_email: ({ gmail }, args) => handleSendEmail(gmail, args),
+        draft_email: ({ gmail }, args) => handleDraftEmail(gmail, args),
+        forward_email: ({ gmail }, args) => handleForwardEmail(gmail, args),
+        unsubscribe_email: ({ gmail }, args) => handleUnsubscribeEmail(gmail, args),
+        scan_tracking_pixels: ({ gmail }, args) => handleScanTrackingPixels(gmail, args),
+        delete_draft: ({ gmail }, args) => handleDeleteDraft(gmail, args),
+        list_drafts: ({ gmail }, args) => handleListDrafts(gmail, args),
+        read_email: ({ gmail }, args) => handleReadEmail(gmail, args),
+        search_emails: ({ gmail }, args) => handleSearchEmails(gmail, args),
+        delete_email: ({ gmail }, args) => handleDeleteEmail(gmail, args),
+        modify_email: ({ gmail }, args) => handleModifyEmail(gmail, args),
+        download_attachment: ({ gmail }, args) => handleDownloadAttachment(gmail, args),
+        create_label: ({ gmail }, args) => handleCreateLabel(gmail, args),
+        update_label: ({ gmail }, args) => handleUpdateLabel(gmail, args),
+        delete_label: ({ gmail }, args) => handleDeleteLabel(gmail, args),
+        list_labels: ({ gmail }, args) => handleListLabels(gmail, args),
+        get_or_create_label: ({ gmail }, args) => handleGetOrCreateLabel(gmail, args),
+        create_filter: ({ gmail }, args) => handleCreateFilter(gmail, args),
+        list_filters: ({ gmail }, args) => handleListFilters(gmail, args),
+        delete_filter: ({ gmail }, args) => handleDeleteFilter(gmail, args),
+      } satisfies Record<string, ToolHandler>);
+    }
+
+    // Contacts tools
+    if (isServiceEnabled("contacts")) {
+      Object.assign(registry, {
+        list_contacts: ({ people }, args) => handleListContacts(people, args),
+        get_contact: ({ people }, args) => handleGetContact(people, args),
+        search_contacts: ({ people }, args) => handleSearchContacts(people, args),
+        create_contact: ({ people }, args) => handleCreateContact(people, args),
+        update_contact: ({ people }, args) => handleUpdateContact(people, args),
+        delete_contact: ({ people }, args) => handleDeleteContact(people, args),
+      } satisfies Record<string, ToolHandler>);
+    }
+
+    // In read-only mode, remove write tools from the registry
+    if (isReadOnlyMode()) {
+      const readOnlyTools = new Set(getAllTools().map((t) => t.name));
+      for (const name of Object.keys(registry)) {
+        if (!readOnlyTools.has(name)) {
+          delete registry[name];
+        }
+      }
+    }
+
+    return registry;
   }
 
-  const args = request.params.arguments || {};
-  const messages = generatePromptMessages(promptName, args);
+  const toolRegistry = createToolRegistry();
 
-  return {
-    description: promptDef.description,
-    messages,
-  };
-});
+  // -----------------------------------------------------------------------------
+  // TOOL CALL REQUEST HANDLER
+  // -----------------------------------------------------------------------------
 
-// -----------------------------------------------------------------------------
-// TOOL REGISTRY
-// -----------------------------------------------------------------------------
+  s.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const toolName = request.params.name;
+    const args = request.params.arguments;
 
-interface ToolServices {
-  drive: drive_v3.Drive;
-  docs: docs_v1.Docs;
-  sheets: sheets_v4.Sheets;
-  slides: slides_v1.Slides;
-  calendar: calendar_v3.Calendar;
-  gmail: gmail_v1.Gmail;
-  people: people_v1.People;
-  context: HandlerContext;
-}
-
-type ToolHandler = (services: ToolServices, args: unknown) => Promise<ToolResponse>;
-
-function createToolRegistry(): Record<string, ToolHandler> {
-  const registry: Record<string, ToolHandler> = {};
-
-  // Discovery and status tools (always available, no auth required for status)
-  Object.assign(registry, {
-    list_tools: (_services, args) => handleListTools(args),
-    get_status: ({ drive }, args) => {
-      // Mirror the dispatcher: ensure workspace is threaded through so
-      // per-workspace token/cred paths are checked.
-      const statusArgs: Record<string, unknown> = {
-        ...((args as Record<string, unknown>) ?? {}),
-      };
+    // Status/discovery tools work without auth.
+    // For get_status we still want workspace-aware diagnostics — inject the
+    // path-based default workspace so per-workspace token/credential paths
+    // are resolved instead of falling back to the global XDG defaults.
+    if (toolName === "get_status") {
+      const statusArgs: Record<string, unknown> = { ...((args as Record<string, unknown>) ?? {}) };
       if (!statusArgs.workspace && defaultWorkspace) {
         statusArgs.workspace = defaultWorkspace;
       }
       return handleGetStatus(authClient, drive, VERSION, statusArgs);
-    },
-  } satisfies Record<string, ToolHandler>);
+    }
+    if (toolName === "list_tools") {
+      return handleListTools(args);
+    }
 
-  // Drive tools
-  if (isServiceEnabled("drive")) {
-    Object.assign(registry, {
-      search: ({ drive }, args) => handleSearch(drive, args),
-      create_text_file: ({ drive }, args) => handleCreateTextFile(drive, args),
-      update_text_file: ({ drive }, args) => handleUpdateTextFile(drive, args),
-      create_folder: ({ drive }, args) => handleCreateFolder(drive, args),
-      list_folder: ({ drive }, args) => handleListFolder(drive, args),
-      delete_item: ({ drive }, args) => handleDeleteItem(drive, args),
-      rename_item: ({ drive }, args) => handleRenameItem(drive, args),
-      move_item: ({ drive }, args) => handleMoveItem(drive, args),
-      copy_file: ({ drive }, args) => handleCopyFile(drive, args),
-      get_file_metadata: ({ drive }, args) => handleGetFileMetadata(drive, args),
-      export_file: ({ drive }, args) => handleExportFile(drive, args),
-      share_file: ({ drive }, args) => handleShareFile(drive, args),
-      get_sharing: ({ drive }, args) => handleGetSharing(drive, args),
-      list_revisions: ({ drive }, args) => handleListRevisions(drive, args),
-      restore_revision: ({ drive }, args) => handleRestoreRevision(drive, args),
-      download_file: ({ drive }, args) => handleDownloadFile(drive, args),
-      upload_file: ({ drive }, args) => handleUploadFile(drive, args),
-      get_storage_quota: ({ drive }, args) => handleGetStorageQuota(drive, args),
-      star_file: ({ drive }, args) => handleStarFile(drive, args),
-      resolve_file_path: ({ drive, context }, args) => handleResolveFilePath(drive, args, context),
-      batch_delete: ({ drive, context }, args) => handleBatchDelete(drive, args, context),
-      batch_restore: ({ drive, context }, args) => handleBatchRestore(drive, args, context),
-      batch_move: ({ drive, context }, args) => handleBatchMove(drive, args, context),
-      batch_share: ({ drive, context }, args) => handleBatchShare(drive, args, context),
-      remove_permission: ({ drive }, args) => handleRemovePermission(drive, args),
-      list_trash: ({ drive }, args) => handleListTrash(drive, args),
-      restore_from_trash: ({ drive }, args) => handleRestoreFromTrash(drive, args),
-      empty_trash: ({ drive, context }, args) => handleEmptyTrash(drive, args, context),
-      get_folder_tree: ({ drive }, args) => handleGetFolderTree(drive, args),
-    } satisfies Record<string, ToolHandler>);
-  }
+    log("Handling tool request", { tool: toolName });
 
-  // Docs tools
-  if (isServiceEnabled("docs")) {
-    Object.assign(registry, {
-      create_google_doc: ({ drive, docs }, args) => handleCreateGoogleDoc(drive, docs, args),
-      update_google_doc: ({ docs }, args) => handleUpdateGoogleDoc(docs, args),
-      get_google_doc_content: ({ drive, docs }, args) =>
-        handleGetGoogleDocContent(drive, docs, args),
-      append_to_doc: ({ docs }, args) => handleAppendToDoc(docs, args),
-      insert_text_in_doc: ({ docs }, args) => handleInsertTextInDoc(docs, args),
-      delete_text_in_doc: ({ docs }, args) => handleDeleteTextInDoc(docs, args),
-      replace_text_in_doc: ({ docs }, args) => handleReplaceTextInDoc(docs, args),
-      format_google_doc_range: ({ docs }, args) => handleFormatGoogleDocRange(docs, args),
-    } satisfies Record<string, ToolHandler>);
-  }
+    try {
+      const meta = (request.params as { _meta?: { progressToken?: string | number } })._meta;
+      const context: HandlerContext = { server: s, progressToken: meta?.progressToken };
 
-  // Sheets tools
-  if (isServiceEnabled("sheets")) {
-    Object.assign(registry, {
-      create_google_sheet: ({ drive, sheets }, args) =>
-        handleCreateGoogleSheet(drive, sheets, args),
-      update_google_sheet: ({ sheets }, args) => handleUpdateGoogleSheet(sheets, args),
-      get_google_sheet_content: ({ drive, sheets }, args) =>
-        handleGetGoogleSheetContent(drive, sheets, args),
-      format_google_sheet_cells: ({ sheets }, args) => handleFormatGoogleSheetCells(sheets, args),
-      merge_google_sheet_cells: ({ sheets }, args) => handleMergeGoogleSheetCells(sheets, args),
-      add_google_sheet_conditional_format: ({ sheets }, args) =>
-        handleAddGoogleSheetConditionalFormat(sheets, args),
-      sheet_tabs: ({ sheets }, args) => handleSheetTabs(sheets, args),
-    } satisfies Record<string, ToolHandler>);
-  }
-
-  // Slides tools
-  if (isServiceEnabled("slides")) {
-    Object.assign(registry, {
-      create_google_slides: ({ drive, slides }, args) =>
-        handleCreateGoogleSlides(drive, slides, args),
-      update_google_slides: ({ slides }, args) => handleUpdateGoogleSlides(slides, args),
-      get_google_slides_content: ({ drive, slides }, args) =>
-        handleGetGoogleSlidesContent(drive, slides, args),
-      create_google_slides_text_box: ({ slides }, args) =>
-        handleCreateGoogleSlidesTextBox(slides, args),
-      create_google_slides_shape: ({ slides }, args) => handleCreateGoogleSlidesShape(slides, args),
-      slides_speaker_notes: ({ slides }, args) => handleSlidesSpeakerNotes(slides, args),
-      format_slides_text: ({ slides }, args) => handleFormatSlidesText(slides, args),
-      format_slides_shape: ({ slides }, args) => handleFormatSlidesShape(slides, args),
-      format_slide_background: ({ slides }, args) => handleFormatSlideBackground(slides, args),
-      list_slide_pages: ({ slides }, args) => handleListSlidePages(slides, args),
-    } satisfies Record<string, ToolHandler>);
-  }
-
-  // Unified smart tools (require drive+docs+sheets+slides)
-  if (areUnifiedToolsEnabled()) {
-    Object.assign(registry, {
-      create_file: ({ drive, docs, sheets, slides }, args) =>
-        handleCreateFile(drive, docs, sheets, slides, args),
-      update_file: ({ drive, docs, sheets, slides }, args) =>
-        handleUpdateFile(drive, docs, sheets, slides, args),
-      get_file_content: ({ drive, docs, sheets, slides }, args) =>
-        handleGetFileContent(drive, docs, sheets, slides, args),
-    } satisfies Record<string, ToolHandler>);
-  }
-
-  // Calendar tools
-  if (isServiceEnabled("calendar")) {
-    Object.assign(registry, {
-      list_calendars: ({ calendar }, args) => handleListCalendars(calendar, args),
-      list_events: ({ calendar }, args) => handleListEvents(calendar, args),
-      get_event: ({ calendar }, args) => handleGetEvent(calendar, args),
-      create_event: ({ calendar }, args) => handleCreateEvent(calendar, args),
-      update_event: ({ calendar }, args) => handleUpdateEvent(calendar, args),
-      delete_event: ({ calendar }, args) => handleDeleteEvent(calendar, args),
-      find_free_time: ({ calendar }, args) => handleFindFreeTime(calendar, args),
-    } satisfies Record<string, ToolHandler>);
-  }
-
-  // Gmail tools
-  if (isServiceEnabled("gmail")) {
-    Object.assign(registry, {
-      send_email: ({ gmail }, args) => handleSendEmail(gmail, args),
-      draft_email: ({ gmail }, args) => handleDraftEmail(gmail, args),
-      forward_email: ({ gmail }, args) => handleForwardEmail(gmail, args),
-      unsubscribe_email: ({ gmail }, args) => handleUnsubscribeEmail(gmail, args),
-      scan_tracking_pixels: ({ gmail }, args) => handleScanTrackingPixels(gmail, args),
-      delete_draft: ({ gmail }, args) => handleDeleteDraft(gmail, args),
-      list_drafts: ({ gmail }, args) => handleListDrafts(gmail, args),
-      read_email: ({ gmail }, args) => handleReadEmail(gmail, args),
-      search_emails: ({ gmail }, args) => handleSearchEmails(gmail, args),
-      delete_email: ({ gmail }, args) => handleDeleteEmail(gmail, args),
-      modify_email: ({ gmail }, args) => handleModifyEmail(gmail, args),
-      download_attachment: ({ gmail }, args) => handleDownloadAttachment(gmail, args),
-      create_label: ({ gmail }, args) => handleCreateLabel(gmail, args),
-      update_label: ({ gmail }, args) => handleUpdateLabel(gmail, args),
-      delete_label: ({ gmail }, args) => handleDeleteLabel(gmail, args),
-      list_labels: ({ gmail }, args) => handleListLabels(gmail, args),
-      get_or_create_label: ({ gmail }, args) => handleGetOrCreateLabel(gmail, args),
-      create_filter: ({ gmail }, args) => handleCreateFilter(gmail, args),
-      list_filters: ({ gmail }, args) => handleListFilters(gmail, args),
-      delete_filter: ({ gmail }, args) => handleDeleteFilter(gmail, args),
-    } satisfies Record<string, ToolHandler>);
-  }
-
-  // Contacts tools
-  if (isServiceEnabled("contacts")) {
-    Object.assign(registry, {
-      list_contacts: ({ people }, args) => handleListContacts(people, args),
-      get_contact: ({ people }, args) => handleGetContact(people, args),
-      search_contacts: ({ people }, args) => handleSearchContacts(people, args),
-      create_contact: ({ people }, args) => handleCreateContact(people, args),
-      update_contact: ({ people }, args) => handleUpdateContact(people, args),
-      delete_contact: ({ people }, args) => handleDeleteContact(people, args),
-    } satisfies Record<string, ToolHandler>);
-  }
-
-  // In read-only mode, remove write tools from the registry
-  if (isReadOnlyMode()) {
-    const readOnlyTools = new Set(getAllTools().map((t) => t.name));
-    for (const name of Object.keys(registry)) {
-      if (!readOnlyTools.has(name)) {
-        delete registry[name];
+      // Inject defaultWorkspace (from path-based URL) into args so downstream
+      // Zod schemas that require `workspace` pass validation even when the
+      // caller relies on the URL path instead of an explicit parameter.
+      const mergedArgs: Record<string, unknown> = { ...(args ?? {}) };
+      if (!mergedArgs.workspace && defaultWorkspace) {
+        mergedArgs.workspace = defaultWorkspace;
       }
-    }
-  }
+      const workspace = (mergedArgs.workspace as string) || defaultWorkspace;
 
-  return registry;
-}
+      let services: ToolServices;
 
-const toolRegistry = createToolRegistry();
-
-
-// -----------------------------------------------------------------------------
-// TOOL CALL REQUEST HANDLER
-// -----------------------------------------------------------------------------
-
-s.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const toolName = request.params.name;
-  const args = request.params.arguments;
-
-  // Status/discovery tools work without auth.
-  // For get_status we still want workspace-aware diagnostics — inject the
-  // path-based default workspace so per-workspace token/credential paths
-  // are resolved instead of falling back to the global XDG defaults.
-  if (toolName === "get_status") {
-    const statusArgs: Record<string, unknown> = { ...((args as Record<string, unknown>) ?? {}) };
-    if (!statusArgs.workspace && defaultWorkspace) {
-      statusArgs.workspace = defaultWorkspace;
-    }
-    return handleGetStatus(authClient, drive, VERSION, statusArgs);
-  }
-  if (toolName === "list_tools") {
-    return handleListTools(args);
-  }
-
-  log("Handling tool request", { tool: toolName });
-
-  try {
-    const meta = (request.params as { _meta?: { progressToken?: string | number } })._meta;
-    const context: HandlerContext = { server: s, progressToken: meta?.progressToken };
-
-    // Inject defaultWorkspace (from path-based URL) into args so downstream
-    // Zod schemas that require `workspace` pass validation even when the
-    // caller relies on the URL path instead of an explicit parameter.
-    const mergedArgs: Record<string, unknown> = { ...(args ?? {}) };
-    if (!mergedArgs.workspace && defaultWorkspace) {
-      mergedArgs.workspace = defaultWorkspace;
-    }
-    const workspace = (mergedArgs.workspace as string) || defaultWorkspace;
-
-    let services: ToolServices;
-
-    if (workspace) {
-      // Workspace-based auth: all tools can use this
-      const ws = await getWorkspaceServices(workspace);
-      services = {
-        drive: ws.drive,
-        docs: ws.docs,
-        sheets: ws.sheets,
-        slides: ws.slides,
-        calendar: ws.calendar,
-        gmail: ws.gmail,
-        people: ws.people,
-        context,
-      };
-    } else {
-      // Legacy singleton auth fallback (stdio / single-account mode)
-      await ensureAuthenticated();
-      services = {
-        drive: drive!,
-        docs: getDocsService(authClient!),
-        sheets: getSheetsService(authClient!),
-        slides: getSlidesService(authClient!),
-        calendar: getCalendarService(authClient!),
-        gmail: getGmailService(authClient!),
-        people: getPeopleService(authClient!),
-        context,
-      };
-    }
-
-    // Inject workspace-level email defaults (From header, signature)
-    if (workspace && (toolName === "send_email" || toolName === "draft_email")) {
-      try {
-        const wsEntry = await getWorkspace(workspace);
-        if (!mergedArgs.from && wsEntry.senderName) {
-          mergedArgs.from = `${wsEntry.senderName} <${wsEntry.email}>`;
-        }
-        if (mergedArgs.skipSignature !== true) {
-          const originalBody = typeof mergedArgs.body === "string" ? mergedArgs.body : "";
-          // Append plain text signature to body
-          if (wsEntry.signature && originalBody) {
-            mergedArgs.body = `${originalBody}\n\n---\n${wsEntry.signature}`;
-          }
-          // Append HTML signature
-          if (wsEntry.signatureHtml && typeof mergedArgs.html === "string") {
-            mergedArgs.html = `${mergedArgs.html}<br><hr style="border:none;border-top:1px solid #ccc;margin:16px 0">${wsEntry.signatureHtml}`;
-          } else if (wsEntry.signatureHtml && !mergedArgs.html && originalBody) {
-            // Auto-generate HTML version from original body (before plain text sig)
-            const htmlBody = originalBody.replace(/\n/g, "<br>");
-            mergedArgs.html = `${htmlBody}<br><hr style="border:none;border-top:1px solid #ccc;margin:16px 0">${wsEntry.signatureHtml}`;
-          }
-        }
-        // Remove skipSignature before passing to handler (not a real schema field)
-        delete mergedArgs.skipSignature;
-      } catch {
-        // Non-fatal: handler will still work without From/signature
+      if (workspace) {
+        // Workspace-based auth: all tools can use this
+        const ws = await getWorkspaceServices(workspace);
+        services = {
+          drive: ws.drive,
+          docs: ws.docs,
+          sheets: ws.sheets,
+          slides: ws.slides,
+          calendar: ws.calendar,
+          gmail: ws.gmail,
+          people: ws.people,
+          context,
+        };
+      } else {
+        // Legacy singleton auth fallback (stdio / single-account mode)
+        await ensureAuthenticated();
+        services = {
+          drive: drive!,
+          docs: getDocsService(authClient!),
+          sheets: getSheetsService(authClient!),
+          slides: getSlidesService(authClient!),
+          calendar: getCalendarService(authClient!),
+          gmail: getGmailService(authClient!),
+          people: getPeopleService(authClient!),
+          context,
+        };
       }
+
+      // Inject workspace-level email defaults (From header, signature)
+      if (workspace && (toolName === "send_email" || toolName === "draft_email")) {
+        try {
+          const wsEntry = await getWorkspace(workspace);
+          if (!mergedArgs.from && wsEntry.senderName) {
+            mergedArgs.from = `${wsEntry.senderName} <${wsEntry.email}>`;
+          }
+          if (mergedArgs.skipSignature !== true) {
+            const originalBody = typeof mergedArgs.body === "string" ? mergedArgs.body : "";
+            // Append plain text signature to body
+            if (wsEntry.signature && originalBody) {
+              mergedArgs.body = `${originalBody}\n\n---\n${wsEntry.signature}`;
+            }
+            // Append HTML signature
+            if (wsEntry.signatureHtml && typeof mergedArgs.html === "string") {
+              mergedArgs.html = `${mergedArgs.html}<br><hr style="border:none;border-top:1px solid #ccc;margin:16px 0">${wsEntry.signatureHtml}`;
+            } else if (wsEntry.signatureHtml && !mergedArgs.html && originalBody) {
+              // Auto-generate HTML version from original body (before plain text sig)
+              const htmlBody = originalBody.replace(/\n/g, "<br>");
+              mergedArgs.html = `${htmlBody}<br><hr style="border:none;border-top:1px solid #ccc;margin:16px 0">${wsEntry.signatureHtml}`;
+            }
+          }
+          // Remove skipSignature before passing to handler (not a real schema field)
+          delete mergedArgs.skipSignature;
+        } catch {
+          // Non-fatal: handler will still work without From/signature
+        }
+      }
+
+      const handler = toolRegistry[toolName];
+      if (!handler) {
+        return errorResponse(`Unknown tool: ${toolName}`);
+      }
+
+      return handler(services, mergedArgs);
+    } catch (error: unknown) {
+      // Check if it's a GoogleAuthError (already mapped)
+      if (error instanceof GoogleAuthError) {
+        return authErrorResponse(error);
+      }
+
+      // Check if it's a Google API error and map it
+      if (isGoogleApiError(error)) {
+        const authError = mapGoogleError(error);
+        return authErrorResponse(authError);
+      }
+
+      // Generic error handling
+      const message = error instanceof Error ? error.message : String(error);
+      log("Tool error", { error: message });
+
+      const hint = isConfigurationError(message) ? DIAGNOSTIC_HINT : "";
+      return errorResponse(message + hint);
     }
-
-    const handler = toolRegistry[toolName];
-    if (!handler) {
-      return errorResponse(`Unknown tool: ${toolName}`);
-    }
-
-    return handler(services, mergedArgs);
-  } catch (error: unknown) {
-    // Check if it's a GoogleAuthError (already mapped)
-    if (error instanceof GoogleAuthError) {
-      return authErrorResponse(error);
-    }
-
-    // Check if it's a Google API error and map it
-    if (isGoogleApiError(error)) {
-      const authError = mapGoogleError(error);
-      return authErrorResponse(authError);
-    }
-
-    // Generic error handling
-    const message = error instanceof Error ? error.message : String(error);
-    log("Tool error", { error: message });
-
-    const hint = isConfigurationError(message) ? DIAGNOSTIC_HINT : "";
-    return errorResponse(message + hint);
-  }
-});
-
+  });
 } // end registerHandlers
 
 // -----------------------------------------------------------------------------
@@ -1082,7 +1084,10 @@ async function main() {
         if (httpPort) {
           // Multi-session HTTP: each client gets its own Server + Transport pair
           // URL path determines default workspace: /mcp/personal → workspace "personal"
-          const sessions = new Map<string, { server: Server; transport: StreamableHTTPServerTransport }>();
+          const sessions = new Map<
+            string,
+            { server: Server; transport: StreamableHTTPServerTransport }
+          >();
 
           const httpServer = createHttpServer(async (req, res) => {
             const sessionId = req.headers["mcp-session-id"] as string | undefined;

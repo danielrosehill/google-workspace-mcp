@@ -105,17 +105,23 @@ export const AttachmentSchema = z
   .object({
     filename: z.string().min(1, "Filename required"),
     content: z.string().optional().describe("Base64-encoded content"),
-    filePath: z.string().optional().describe("Absolute file path on the server (read and encoded automatically)"),
-    sourceUrl: z.string().url().optional().describe("HTTP(S) URL the server fetches and base64-encodes (e.g. presigned MinIO URL)"),
+    filePath: z
+      .string()
+      .optional()
+      .describe("Absolute file path on the server (read and encoded automatically)"),
+    sourceUrl: z
+      .string()
+      .url()
+      .optional()
+      .describe("HTTP(S) URL the server fetches and base64-encodes (e.g. presigned MinIO URL)"),
     mimeType: z.string().optional().describe("MIME type (auto-detected if not provided)"),
   })
   .refine((data) => data.content || data.filePath || data.sourceUrl, {
     message: "One of content, filePath, or sourceUrl must be provided",
   })
-  .refine(
-    (data) => [data.content, data.filePath, data.sourceUrl].filter(Boolean).length === 1,
-    { message: "Provide exactly one of content, filePath, or sourceUrl" },
-  );
+  .refine((data) => [data.content, data.filePath, data.sourceUrl].filter(Boolean).length === 1, {
+    message: "Provide exactly one of content, filePath, or sourceUrl",
+  });
 
 export type AttachmentInput = z.infer<typeof AttachmentSchema>;
 
@@ -130,7 +136,17 @@ export const SendEmailSchema = z.object({
   cc: z.array(z.string().email()).optional().describe("CC recipients"),
   bcc: z.array(z.string().email()).optional().describe("BCC recipients"),
   replyTo: z.string().email().optional().describe("Reply-to address"),
-  from: z.string().optional().describe("From header (auto-injected from workspace senderName)"),
+  from: z
+    .string()
+    .optional()
+    .describe(
+      'Override the From header. Must match a Gmail "Send mail as" alias configured on the ' +
+        "authenticated account (Settings → Accounts → Send mail as) — Gmail will reject the send " +
+        "otherwise. Format: 'Display Name <alias@example.com>' or just 'alias@example.com'. " +
+        "If omitted, Gmail uses the workspace's primary sender identity. Use this for persona " +
+        "sends (e.g. herman@, claude@) so the From: address actually matches the persona instead " +
+        "of falling back to the primary account.",
+    ),
   attachments: z.array(AttachmentSchema).optional().describe("File attachments"),
   threadId: z.string().optional().describe("Thread ID to reply to"),
   inReplyTo: z.string().optional().describe("Message-ID header for threading"),
@@ -140,7 +156,7 @@ export const SendEmailSchema = z.object({
     .describe(
       "Enforce right-to-left rendering for the email body. Use for Hebrew, Arabic, Farsi, " +
         "Urdu, or any RTL-language email. When true, the server wraps the HTML body in " +
-        "<div dir=\"rtl\" style=\"text-align: right;\">...</div>. If html is omitted, one is " +
+        '<div dir="rtl" style="text-align: right;">...</div>. If html is omitted, one is ' +
         "generated from body (newlines -> <br>) and wrapped. Always prefer this over relying on " +
         "client auto-detection — it renders reliably across Gmail, Outlook, and mobile clients.",
     ),
@@ -158,14 +174,23 @@ export const DraftEmailSchema = z.object({
   cc: z.array(z.string().email()).optional().describe("CC recipients"),
   bcc: z.array(z.string().email()).optional().describe("BCC recipients"),
   replyTo: z.string().email().optional().describe("Reply-to address"),
+  from: z
+    .string()
+    .optional()
+    .describe(
+      'Override the From header. Must match a Gmail "Send mail as" alias on the authenticated ' +
+        "account. Format: 'Display Name <alias@example.com>' or 'alias@example.com'. See " +
+        "send_email for details.",
+    ),
   attachments: z.array(AttachmentSchema).optional().describe("File attachments"),
   threadId: z.string().optional().describe("Thread ID for draft replies"),
+  inReplyTo: z.string().optional().describe("Message-ID header for threading"),
   rtl: z
     .boolean()
     .optional()
     .describe(
       "Enforce right-to-left rendering (Hebrew, Arabic, Farsi, Urdu). Wraps HTML body in " +
-        "<div dir=\"rtl\" style=\"text-align: right;\">. See send_email for full details.",
+        '<div dir="rtl" style="text-align: right;">. See send_email for full details.',
     ),
 });
 
@@ -194,7 +219,7 @@ export const ForwardEmailSchema = z.object({
   rtl: z
     .boolean()
     .optional()
-    .describe("Wrap forwarded body in dir=\"rtl\" for Hebrew/Arabic/Farsi/Urdu content."),
+    .describe('Wrap forwarded body in dir="rtl" for Hebrew/Arabic/Farsi/Urdu content.'),
 });
 
 export type ForwardEmailInput = z.infer<typeof ForwardEmailSchema>;

@@ -227,8 +227,21 @@ export async function handleDraftEmail(
 ): Promise<ToolResponse> {
   const validation = validateArgs(DraftEmailSchema, args);
   if (!validation.success) return validation.response;
-  const { draftId, to, subject, body, html, cc, bcc, replyTo, attachments, threadId, rtl } =
-    validation.data;
+  const {
+    draftId,
+    to,
+    subject,
+    body,
+    html,
+    cc,
+    bcc,
+    replyTo,
+    from,
+    attachments,
+    threadId,
+    inReplyTo,
+    rtl,
+  } = validation.data;
 
   const effectiveHtml = rtl ? applyRtlWrapping(body || "", html) : html;
 
@@ -242,7 +255,9 @@ export async function handleDraftEmail(
     cc,
     bcc,
     replyTo,
+    from,
     attachments: resolvedAttachments,
+    inReplyTo,
   });
 
   const messagePayload = { raw, threadId };
@@ -329,9 +344,7 @@ export async function handleForwardEmail(
 
   let html: string | undefined;
   if (origBody.html) {
-    const noteHtml = additionalBody
-      ? `<p>${additionalBody.replace(/\n/g, "<br>")}</p>`
-      : "";
+    const noteHtml = additionalBody ? `<p>${additionalBody.replace(/\n/g, "<br>")}</p>` : "";
     const headerHtml =
       `<div style="border-left:2px solid #ccc;padding-left:1em;margin:1em 0;">` +
       `<p><b>---------- Forwarded message ----------</b><br>` +
@@ -431,8 +444,7 @@ export async function handleUnsubscribeEmail(
   const headers = parseEmailHeaders(msg.data.payload?.headers || []);
   const listUnsub = headers["list-unsubscribe"];
   const listUnsubPost = headers["list-unsubscribe-post"];
-  const oneClick =
-    !!listUnsubPost && /List-Unsubscribe\s*=\s*One-Click/i.test(listUnsubPost);
+  const oneClick = !!listUnsubPost && /List-Unsubscribe\s*=\s*One-Click/i.test(listUnsubPost);
 
   const parsed = listUnsub ? parseListUnsubscribe(listUnsub) : { urls: [], mailtos: [] };
 
@@ -440,10 +452,11 @@ export async function handleUnsubscribeEmail(
   if (oneClick && parsed.urls.length > 0) {
     const url = parsed.urls[0];
     if (dryRun) {
-      return structuredResponse(
-        `Dry run: would POST to one-click unsubscribe URL ${url}`,
-        { action: "one_click_post", url, dryRun: true },
-      );
+      return structuredResponse(`Dry run: would POST to one-click unsubscribe URL ${url}`, {
+        action: "one_click_post",
+        url,
+        dryRun: true,
+      });
     }
     try {
       const res = await fetch(url, {
@@ -627,9 +640,7 @@ function detectTrackingPixels(html: string): DetectedTracker[] {
       reasons.push(hiddenStyle ? "hidden via CSS" : "zero dimensions via CSS");
     }
 
-    const isKnown = KNOWN_TRACKER_DOMAINS.some(
-      (d) => domain === d || domain.endsWith("." + d),
-    );
+    const isKnown = KNOWN_TRACKER_DOMAINS.some((d) => domain === d || domain.endsWith("." + d));
     if (isKnown) {
       primaryType = primaryType || "known_tracker_domain";
       reasons.push(`known tracker domain: ${domain}`);
