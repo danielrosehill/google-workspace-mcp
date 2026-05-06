@@ -633,10 +633,12 @@ export const driveTools: ToolDefinition[] = [
   {
     name: "upload_file",
     description:
-      "Upload a file to Google Drive. Provide exactly one of sourcePath (server-local file), " +
-      "base64Content (inline, cross-machine), or sourceUrl (the server fetches the URL — " +
-      "ideal for presigned S3 URLs from remote clients). Set cleanupSource: true to " +
-      "auto-delete a sourcePath file after successful upload.",
+      "Upload a file to Google Drive. REMOTE-MCP NOTE: this server is not on the user's " +
+      "workstation. For a local workstation file, the user must first run `s3-stage <path>` " +
+      "to stage it to MinIO; pass the returned presigned HTTPS URL as `sourceUrl`. " +
+      "`sourcePath` only works for files already on the SERVER. `base64Content` is acceptable " +
+      "only for very small files (<256 KB) — never use it for media or documents. " +
+      "Set cleanupSource: true to auto-delete a sourcePath file after successful upload.",
     inputSchema: {
       type: "object",
       properties: {
@@ -2952,15 +2954,31 @@ export const gmailTools: ToolDefinition[] = [
         attachments: {
           type: "array",
           description:
-            "File attachments. Provide either content (base64) or filePath (server reads the file).",
+            "File attachments. REMOTE-MCP NOTE: for a local workstation file, the user must " +
+            "first run `s3-stage <path>` and supply the presigned URL as `sourceUrl`. " +
+            "`filePath` only resolves on the SERVER, not the workstation. `content` (base64) " +
+            "is for very small files (<256 KB) only.",
           items: {
             type: "object",
             properties: {
               filename: { type: "string" },
-              content: { type: "string", description: "Base64-encoded content" },
+              content: {
+                type: "string",
+                description:
+                  "Base64-encoded content. Only for tiny files (<256 KB) — for anything " +
+                  "larger, prefer sourceUrl with s3-stage.",
+              },
               filePath: {
                 type: "string",
-                description: "Absolute file path on the server (auto-encoded)",
+                description:
+                  "Absolute file path on the SERVER (auto-encoded). Does NOT refer to the " +
+                  "workstation — use sourceUrl for local workstation files.",
+              },
+              sourceUrl: {
+                type: "string",
+                description:
+                  "HTTP(S) URL the server will fetch and attach. Preferred for remote " +
+                  "clients — supply a presigned S3 GET URL from `s3-stage`.",
               },
               mimeType: { type: "string" },
             },
@@ -3030,7 +3048,13 @@ export const gmailTools: ToolDefinition[] = [
             "authenticated account. Format: 'Display Name <alias@example.com>' or " +
             "'alias@example.com'. See send_email for details.",
         },
-        attachments: { type: "array" },
+        attachments: {
+          type: "array",
+          description:
+            "Same shape as send_email.attachments — items support content (base64), filePath " +
+            "(SERVER-local), or sourceUrl (presigned URL from s3-stage on the workstation). " +
+            "Use sourceUrl for local workstation files; this server is remote.",
+        },
         threadId: { type: "string" },
         inReplyTo: { type: "string", description: "Message-ID for threading" },
         rtl: {
@@ -3404,7 +3428,12 @@ export const gmailTools: ToolDefinition[] = [
   {
     name: "download_attachment",
     readOnly: true,
-    description: "Download an email attachment to disk",
+    description:
+      "Download an email attachment to disk on the SERVER's filesystem (not the workstation). " +
+      "REMOTE-MCP NOTE: when the user wants the file on their workstation, this tool alone is " +
+      "not sufficient — the file lands on the server. Either (a) pipe the saved path back " +
+      "through `s3-stage` on the server side and have the user fetch the URL, or (b) use a " +
+      "different transport.",
     inputSchema: {
       type: "object",
       properties: {

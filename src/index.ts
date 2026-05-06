@@ -279,6 +279,17 @@ function createMcpServer(defaultWorkspace?: string): Server {
     },
     {
       instructions:
+        "REMOTE FILE TRANSFER POLICY: this MCP server runs remotely from the workstation. " +
+        "Local workstation files are NOT directly accessible — `filePath` and `sourcePath` " +
+        "parameters refer to the SERVER's filesystem, not the client's. To attach or upload a " +
+        "local workstation file (Drive upload, Gmail attachment, etc.), the user must first " +
+        "stage it to the residence MinIO bucket using the `s3-stage <path>` CLI on the " +
+        "workstation; that returns a presigned HTTPS URL. Pass the URL as `sourceUrl` " +
+        "(upload_file) or `attachments[].sourceUrl` (send_email / draft_email) — the server " +
+        "fetches it directly. DO NOT base64-encode files larger than ~256 KB; base64 inlining " +
+        "balloons context and frequently fails. If the user asks you to attach a local file " +
+        "and you have not been given a URL, instruct them to run `s3-stage <path>` and " +
+        "paste the returned URL. " +
         "On any tool error, call get_status for diagnostics before asking the user to debug. " +
         "When sending or drafting email in an RTL language (Hebrew, Arabic, Farsi, Urdu), " +
         "always pass rtl: true to send_email / draft_email so the body is wrapped in an " +
