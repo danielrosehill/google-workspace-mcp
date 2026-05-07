@@ -112,42 +112,21 @@ When the MCP server runs on a **different machine** than the client (e.g., serve
 
 **Solutions (in order of preference):**
 
-#### Option 1: Use the MCP File Staging Service (recommended)
+#### Option 1: Use a presigned URL via `sourceUrl` (recommended)
 
-Deploy [mcp-file-staging-service](https://github.com/danielrosehill/mcp-file-staging-service) alongside this MCP server. It provides a standard HTTP multipart upload endpoint that any client (CLI, browser, phone) can use:
-
-```bash
-# Stage the file from any HTTP client
-curl -F "file=@report.pdf" http://server:3201/upload
-# Returns: {"stagingPath": "/staging/a1b2c3d4.pdf", ...}
-```
-
-Then call `upload_file` with the returned path:
+Stage the file to any HTTP-accessible store the MCP server can reach (e.g., S3 / MinIO with a short-lived presigned URL), then pass the URL as `sourceUrl`. The server fetches and uploads the bytes directly — no client-side base64, no shared filesystem required.
 
 ```json
 {
   "name": "report.pdf",
-  "sourcePath": "/staging/a1b2c3d4.pdf",
-  "folderId": "...",
-  "cleanupSource": true
+  "sourceUrl": "https://minio.example.com/mcp-staging/<uuid>/report.pdf?X-Amz-Signature=...",
+  "folderId": "..."
 }
 ```
 
-`cleanupSource: true` auto-deletes the staged file after successful upload to Drive.
+Same shape works for Gmail attachments via `attachments[].sourceUrl` on `send_email` / `draft_email`. Available in v4.5.0+.
 
-See the [staging service README](https://github.com/danielrosehill/mcp-file-staging-service) for Docker deployment and configuration.
-
-#### Option 2: Stage via SCP
-
-If SSH access is available, SCP files directly to the server's staging directory:
-
-```bash
-scp /local/path/file.pdf server:/tmp/gws-mcp-staging/file.pdf
-```
-
-Then use `sourcePath` + `cleanupSource: true` as above.
-
-#### Option 3: Use base64Content
+#### Option 2: Use base64Content
 
 For smaller files (under ~5MB), encode as base64 and pass directly:
 
@@ -160,6 +139,12 @@ For smaller files (under ~5MB), encode as base64 and pass directly:
 ```
 
 Works across any network topology but increases payload size by ~33%.
+
+#### Option 3: Server-local `sourcePath`
+
+If the client and server share a filesystem (e.g., a co-located staging directory), pass `sourcePath` pointing at a path the **server** can read. Less flexible than `sourceUrl` and only worth using when no HTTP-reachable store is available.
+
+> **Note:** an earlier version of this guide recommended an `mcp-file-staging-service` HTTP shim on port 3201. That service has been retired in favour of `sourceUrl` + presigned URLs, which is simpler and more portable.
 
 ## API Issues
 
