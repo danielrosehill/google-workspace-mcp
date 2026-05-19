@@ -103,6 +103,7 @@ export class AuthServer {
       res.end("PKCE not initialized - call start() first");
       return;
     }
+    const loginHint = process.env.GOOGLE_LOGIN_HINT || undefined;
     const authUrl = this.flowOAuth2Client.generateAuthUrl({
       access_type: "offline",
       scope: getScopesForEnabledServices(),
@@ -110,11 +111,14 @@ export class AuthServer {
       code_challenge_method: CodeChallengeMethod.S256,
       code_challenge: this.codeChallenge,
       state: this.expectedState,
+      ...(loginHint ? { login_hint: loginHint } : {}),
     });
+    const profileLabel = loginHint ?? getActiveProfile() ?? "";
+    const heading = profileLabel
+      ? `Google Authentication — ${profileLabel}`
+      : "Google Drive Authentication";
     res.writeHead(200, { "Content-Type": "text/html" });
-    res.end(
-      `<h1>Google Drive Authentication</h1>` + `<a href="${authUrl}">Authenticate with Google</a>`,
-    );
+    res.end(`<h1>${heading}</h1><a href="${authUrl}">Authenticate with Google</a>`);
   }
 
   /**
@@ -368,6 +372,7 @@ export class AuthServer {
       throw new Error("PKCE not initialized - internal error");
     }
 
+    const loginHint = process.env.GOOGLE_LOGIN_HINT || undefined;
     const authorizeUrl = this.flowOAuth2Client!.generateAuthUrl({
       access_type: "offline",
       scope: getScopesForEnabledServices(),
@@ -375,10 +380,13 @@ export class AuthServer {
       code_challenge_method: CodeChallengeMethod.S256,
       code_challenge: this.codeChallenge,
       state: this.expectedState,
+      ...(loginHint ? { login_hint: loginHint } : {}),
     });
 
+    const profileLabel = loginHint ?? getActiveProfile();
     console.error("\n🔐 AUTHENTICATION REQUIRED");
     console.error("══════════════════════════════════════════");
+    if (profileLabel) console.error(`\nAccount: ${profileLabel}`);
     console.error("\nOpening your browser to authenticate...");
     console.error(`\nAuth URL (copy if browser doesn't open):\n  ${authorizeUrl}`);
     console.error("\nIf running remotely: open the URL in your local browser.");

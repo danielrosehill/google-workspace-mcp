@@ -16,10 +16,11 @@
 
 | Variable                          | Description                            | Default                                      | Example                    |
 | --------------------------------- | -------------------------------------- | -------------------------------------------- | -------------------------- |
-| `GOOGLE_WORKSPACE_MCP_TOKEN_PATH` | Override token storage location        | `~/.config/google-workspace-mcp/tokens.json` | `/custom/path/tokens.json` |
-| `GOOGLE_WORKSPACE_MCP_PROFILE`    | Named profile for credential isolation | (none)                                       | `work`                     |
-| `GOOGLE_WORKSPACE_TOON_FORMAT`    | Enable TOON format for responses       | `false`                                      | `true`                     |
-| `DEBUG`                           | Enable debug logging                   | (disabled)                                   | `google-workspace-mcp:*`   |
+| `GOOGLE_WORKSPACE_MCP_TOKEN_PATH` | Override token storage location                                              | `~/.config/google-workspace-mcp/tokens.json` | `/custom/path/tokens.json`       |
+| `GOOGLE_WORKSPACE_MCP_PROFILE`    | Named profile for credential isolation                                       | (none)                                       | `work`                           |
+| `GOOGLE_LOGIN_HINT`               | Pre-select a Google account in the OAuth prompt (skips picker if signed in) | (none)                                       | `you@example.com`                |
+| `GOOGLE_WORKSPACE_TOON_FORMAT`    | Enable TOON format for responses                                             | `false`                                      | `true`                           |
+| `DEBUG`                           | Enable debug logging                                                         | (disabled)                                   | `google-workspace-mcp:*`         |
 
 ### System Variables
 
@@ -58,7 +59,8 @@ npx @dguido/google-workspace-mcp auth --profile work
       "command": "npx",
       "args": ["@dguido/google-workspace-mcp"],
       "env": {
-        "GOOGLE_WORKSPACE_MCP_PROFILE": "work"
+        "GOOGLE_WORKSPACE_MCP_PROFILE": "work",
+        "GOOGLE_LOGIN_HINT": "you@example.com"
       }
     }
   }
@@ -66,6 +68,8 @@ npx @dguido/google-workspace-mcp auth --profile work
 ```
 
 Repeat for each account (e.g., `personal`, `work`). Each profile stores its own `credentials.json` and `tokens.json`.
+
+`GOOGLE_LOGIN_HINT` is optional but recommended for multi-account setups. It passes the account email to Google's OAuth prompt so the browser pre-selects the right account — or skips the account picker entirely if that account is already signed in.
 
 Profile names must be 1-64 characters: letters, digits, hyphens, underscores.
 
